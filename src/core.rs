@@ -16,8 +16,15 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub async fn new(email: &str, pwd: &str, app_id: &str) -> Result<Self, Box<dyn Error>> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("X-App-Id", app_id.parse().expect("Failed to parse app id"));
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
         let client = reqwest::ClientBuilder::new()
             .user_agent(API_USER_AGENT)
+            .default_headers(headers)
             .build()
             .unwrap();
         let mut api_client = Self {
