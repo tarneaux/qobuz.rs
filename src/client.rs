@@ -141,16 +141,12 @@ async fn get_auth_token(email: &str, pwd: &str, app_id: &str) -> Result<String, 
         })?;
     // verify json["user"]["credential"]["parameters"] exists.
     // If not, we are authenticating into a free account which can't download tracks.
-    // TODO: find a way to check without unwrap's.
-    println!(
-        "{}",
-        resp.get("user")
-            .unwrap()
-            .get("credential")
-            .unwrap()
-            .get("parameters")
-            .unwrap()
-    );
+    resp.get("user")
+        .ok_or(LoginError::FreeAccount)?
+        .get("credential")
+        .ok_or(LoginError::FreeAccount)?
+        .get("parameters")
+        .ok_or(LoginError::FreeAccount)?;
     match resp.get("user_auth_token") {
         Some(Value::String(token)) => Ok(token.to_string()),
         None | Some(_) => Err(LoginError::NoUserAuthToken),
@@ -164,6 +160,7 @@ pub enum LoginError {
     ReqwestError(reqwest::Error),
     NoUserAuthToken,
     GetDownloadUrlError(GetDownloadUrlError),
+    FreeAccount,
 }
 impl Display for LoginError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -175,6 +172,10 @@ impl Display for LoginError {
             LoginError::GetDownloadUrlError(e) => write!(
                 f,
                 "Error while trying to get download URL to test token: {e}"
+            ),
+            LoginError::FreeAccount => write!(
+                f,
+                "Tried to authenticate into a free account, which can't download tracks."
             ),
         }
     }
