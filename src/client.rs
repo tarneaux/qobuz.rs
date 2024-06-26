@@ -10,10 +10,10 @@ const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/83.0";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
-    pub client: reqwest::Client,
-    secret: Option<String>,
+    pub reqwest_client: reqwest::Client,
+    secret: String,
 }
 
 impl Client {
@@ -23,53 +23,26 @@ impl Client {
         app_id: &str,
         secrets: Vec<String>,
     ) -> Result<Self, Box<dyn Error>> {
-        let client = make_http_client(app_id, None);
-        let mut api_client = Self {
-            client,
-            secret: None,
-        };
-        api_client.login(email, pwd, secrets, app_id).await?;
-        println!("Secret: {}", api_client.secret.clone().unwrap());
-        Ok(api_client)
-    }
+        let token = get_auth_token(email, pwd, app_id).await?;
+        let reqwest_client = make_http_client(app_id, Some(&token));
 
-    async fn login(
-        &mut self,
-        email: &str,
-        pwd: &str,
-        secrets: Vec<String>,
-        app_id: &str,
-    ) -> Result<(), LoginError> {
-        let params = [("email", email), ("password", pwd), ("app_id", &app_id)];
-        let resp = self
-            .do_request("user/login", &params)
-            .await
-            .map_err(|e| match e.status() {
-                Some(reqwest::StatusCode::UNAUTHORIZED) => LoginError::InvalidCredentials,
-                Some(reqwest::StatusCode::BAD_REQUEST) => LoginError::InvalidAppId,
-                _ => LoginError::ReqwestError(e),
-            })?;
-        // verify json["user"]["credential"]["parameters"] exists.
-        // If not, we are authenticating into a free account which can't download tracks.
-        // TODO: find a way to check without unwrap's.
-        println!(
-            "{}",
-            resp.get("user")
-                .unwrap()
-                .get("credential")
-                .unwrap()
-                .get("parameters")
-                .unwrap()
-        );
-        match resp.get("user_auth_token") {
-            Some(Value::String(token)) => {
-                self.set_correct_secret(secrets).await?;
-                println!("{}", token);
-                self.client = make_http_client(&app_id, Some(token));
-                Ok(())
+        // TODO: Only take one secret and return an error if it fails. Then add another function or
+        // method that gets the first valid secret based on a Vec of secrets.
+
+        // We can't use `iter().find()` here since `test_secret()` is async.
+        let mut secret = None;
+        for tested_secret in secrets {
+            if test_secret(reqwest_client.clone(), tested_secret.to_string()).await? {
+                secret = Some(tested_secret);
+                break;
             }
-            None | Some(_) => Err(LoginError::NoUserAuthToken),
         }
+        let secret = secret.ok_or(NoValidSecret)?;
+
+        Ok(Self {
+            reqwest_client,
+            secret,
+        })
     }
 
     pub async fn get_track_file_url(
@@ -83,10 +56,7 @@ impl Client {
 
         let r_sig = format!(
             "trackgetFileUrlformat_id{}intentstreamtrack_id{}{}{}",
-            quality_id,
-            track_id,
-            timestamp_now,
-            self.secret.as_ref().unwrap()
+            quality_id, track_id, timestamp_now, self.secret
         );
 
         println!("{r_sig}");
@@ -114,39 +84,76 @@ impl Client {
         path: &str,
         params: &[(&str, &str)],
     ) -> Result<Value, reqwest::Error> {
-        let url = format!("{API_URL}{path}");
-        let resp = self
-            .client
-            .get(&url)
-            .query(params)
-            .send()
-            .await?
-            .error_for_status()?;
-        let json: Value = resp.json().await?;
-        Ok(json)
+        do_request(&self.reqwest_client, path, params).await
     }
+}
 
-    async fn set_correct_secret(&mut self, secrets: Vec<String>) -> Result<(), LoginError> {
-        for secret in secrets {
-            if secret.is_empty() {
-                continue;
-            }
-            self.secret = Some(secret);
-            match self.get_track_file_url("64868958", Quality::HiRes192).await {
-                Err(GetDownloadUrlError::IsSample) => return Ok(()),
-                Err(GetDownloadUrlError::Reqwest(e)) => {
-                    e.status().expect(&format!(
-                        "Error while getting correct secret: returned error is unexpected {e}"
-                    ));
-                    continue;
-                }
-                Err(e) => return Err(LoginError::GetDownloadUrlError(e)),
-                // Since the X-User-Auth-Token header isn't set yet, we can't get a non-sample URL.
-                Ok(_) => unreachable!(),
-            }
+async fn test_secret(reqwest_client: reqwest::Client, secret: String) -> Result<bool, LoginError> {
+    if secret.is_empty() {
+        return Ok(false);
+    }
+    let client = Client {
+        reqwest_client,
+        secret,
+    };
+    match client
+        .get_track_file_url("64868958", Quality::HiRes192)
+        .await
+    {
+        Ok(_) => Ok(true),
+        // Since the X-User-Auth-Token header is set, we can't get a sample URL.
+        Err(GetDownloadUrlError::IsSample) => unreachable!(),
+        Err(GetDownloadUrlError::Reqwest(e)) => {
+            e.status().expect(&format!(
+                "Error while getting correct secret: returned error is unexpected {e}"
+            ));
+            Ok(false)
         }
-        self.secret = None;
-        Err(LoginError::NoValidSecret)
+        Err(e) => return Err(LoginError::GetDownloadUrlError(e)),
+    }
+}
+
+async fn do_request(
+    client: &reqwest::Client,
+    path: &str,
+    params: &[(&str, &str)],
+) -> Result<Value, reqwest::Error> {
+    let url = format!("{API_URL}{path}");
+    let resp = client
+        .get(&url)
+        .query(params)
+        .send()
+        .await?
+        .error_for_status()?;
+    let json: Value = resp.json().await?;
+    Ok(json)
+}
+
+async fn get_auth_token(email: &str, pwd: &str, app_id: &str) -> Result<String, LoginError> {
+    let client = make_http_client(app_id, None);
+    let params = [("email", email), ("password", pwd), ("app_id", &app_id)];
+    let resp = do_request(&client, "user/login", &params)
+        .await
+        .map_err(|e| match e.status() {
+            Some(reqwest::StatusCode::UNAUTHORIZED) => LoginError::InvalidCredentials,
+            Some(reqwest::StatusCode::BAD_REQUEST) => LoginError::InvalidAppId,
+            _ => LoginError::ReqwestError(e),
+        })?;
+    // verify json["user"]["credential"]["parameters"] exists.
+    // If not, we are authenticating into a free account which can't download tracks.
+    // TODO: find a way to check without unwrap's.
+    println!(
+        "{}",
+        resp.get("user")
+            .unwrap()
+            .get("credential")
+            .unwrap()
+            .get("parameters")
+            .unwrap()
+    );
+    match resp.get("user_auth_token") {
+        Some(Value::String(token)) => Ok(token.to_string()),
+        None | Some(_) => Err(LoginError::NoUserAuthToken),
     }
 }
 
@@ -156,7 +163,6 @@ pub enum LoginError {
     InvalidAppId,
     ReqwestError(reqwest::Error),
     NoUserAuthToken,
-    NoValidSecret,
     GetDownloadUrlError(GetDownloadUrlError),
 }
 impl Display for LoginError {
@@ -166,7 +172,6 @@ impl Display for LoginError {
             LoginError::InvalidAppId => write!(f, "Invalid app id"),
             LoginError::ReqwestError(e) => write!(f, "Reqwest error: {}", e),
             LoginError::NoUserAuthToken => write!(f, "No user auth token"),
-            LoginError::NoValidSecret => write!(f, "No valid secret found"),
             LoginError::GetDownloadUrlError(e) => write!(
                 f,
                 "Error while trying to get download URL to test token: {e}"
@@ -175,6 +180,15 @@ impl Display for LoginError {
     }
 }
 impl Error for LoginError {}
+
+#[derive(Debug)]
+struct NoValidSecret;
+impl Display for NoValidSecret {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "No valid secret found")
+    }
+}
+impl Error for NoValidSecret {}
 
 #[derive(Debug)]
 pub enum GetDownloadUrlError {

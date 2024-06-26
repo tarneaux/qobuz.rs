@@ -25,7 +25,7 @@ async fn main() {
         .await
         .unwrap();
     let mut byte_stream = client
-        .client
+        .reqwest_client
         .get(url.inner)
         .send()
         .await
