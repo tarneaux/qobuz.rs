@@ -13,7 +13,6 @@ const API_USER_AGENT: &str =
 #[derive(Debug)]
 pub struct Client {
     pub client: reqwest::Client,
-    app_id: String,
     secret: Option<String>,
 }
 
@@ -27,10 +26,9 @@ impl Client {
         let client = make_http_client(app_id, None);
         let mut api_client = Self {
             client,
-            app_id: app_id.to_string(),
             secret: None,
         };
-        api_client.login(email, pwd, secrets).await?;
+        api_client.login(email, pwd, secrets, app_id).await?;
         println!("Secret: {}", api_client.secret.clone().unwrap());
         Ok(api_client)
     }
@@ -40,12 +38,9 @@ impl Client {
         email: &str,
         pwd: &str,
         secrets: Vec<String>,
+        app_id: &str,
     ) -> Result<(), LoginError> {
-        let params = [
-            ("email", email),
-            ("password", pwd),
-            ("app_id", &self.app_id),
-        ];
+        let params = [("email", email), ("password", pwd), ("app_id", &app_id)];
         let resp = self
             .do_request("user/login", &params)
             .await
@@ -70,7 +65,7 @@ impl Client {
             Some(Value::String(token)) => {
                 self.set_correct_secret(secrets).await?;
                 println!("{}", token);
-                self.client = make_http_client(&self.app_id, Some(token));
+                self.client = make_http_client(&app_id, Some(token));
                 Ok(())
             }
             None | Some(_) => Err(LoginError::NoUserAuthToken),
