@@ -1,14 +1,16 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Playlist {
-    #[serde(rename = "created_at")]
-    pub created_at: u64,
+    #[serde(rename = "created_at", with = "ser_datetime_i64")]
+    pub created_at: DateTime<Utc>, // TODO: Should NaiveDateTime be used instead?
     pub description: String,
-    pub duration: u64,
+    #[serde(with = "ser_duration_u64")]
+    pub duration: Duration,
     pub genres: Vec<Value>,
     pub id: u64,
     pub images: Vec<String>,
@@ -60,11 +62,10 @@ pub struct Track {
     pub audio_info: AudioInfo,
     pub composer: Option<Composer>,
     pub copyright: String,
-    // #[serde(rename = "created_at")]
-    // pub created_at: i64,
     pub displayable: bool,
     pub downloadable: bool,
-    pub duration: i64,
+    #[serde(with = "ser_duration_u64")]
+    pub duration: Duration,
     pub hires: bool,
     #[serde(rename = "hires_streamable")]
     pub hires_streamable: bool,
@@ -106,7 +107,8 @@ pub struct Album {
     pub artist: Artist,
     pub displayable: bool,
     pub downloadable: bool,
-    pub duration: i64,
+    #[serde(with = "ser_duration_u64")]
+    pub duration: Duration,
     pub genre: Genre,
     pub hires: bool,
     #[serde(rename = "hires_streamable")]
@@ -193,4 +195,42 @@ pub struct Composer {
 pub struct Performer {
     pub id: i64,
     pub name: String,
+}
+
+mod ser_datetime_i64 {
+    use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(datetime: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        datetime.timestamp().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(DateTime::from_timestamp(i64::deserialize(deserializer)?, 0).unwrap())
+    }
+}
+
+mod ser_duration_u64 {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Duration::from_secs(u64::deserialize(deserializer)?))
+    }
 }
