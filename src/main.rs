@@ -1,6 +1,5 @@
-mod core;
-use crate::core::{ApiClient, Quality};
 use futures::StreamExt;
+use qobuz::{Client, Quality};
 use tokio::fs::File;
 use tokio::{self};
 
@@ -17,7 +16,7 @@ async fn main() {
         .map(|s| s.to_string())
         .collect();
     println!("Got env vars, now logging in.");
-    let client = ApiClient::new(&email, &password, &app_id, secrets)
+    let client = Client::new(&email, &password, &app_id, secrets)
         .await
         .unwrap();
     println!("{:?}", client);
