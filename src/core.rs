@@ -1,5 +1,7 @@
 use std::error::Error;
 
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt, fmt::Display, fmt::Formatter};
 
@@ -9,34 +11,35 @@ const API_USER_AGENT: &str =
 
 #[derive(Debug)]
 pub struct ApiClient {
-    client: reqwest::Client,
+    pub client: reqwest::Client,
     app_id: String,
-    user_auth_token: Option<String>,
+    secret: Option<String>,
 }
 
 impl ApiClient {
-    pub async fn new(email: &str, pwd: &str, app_id: &str) -> Result<Self, Box<dyn Error>> {
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("X-App-Id", app_id.parse().expect("Failed to parse app id"));
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
-        );
-        let client = reqwest::ClientBuilder::new()
-            .user_agent(API_USER_AGENT)
-            .default_headers(headers)
-            .build()
-            .unwrap();
+    pub async fn new(
+        email: &str,
+        pwd: &str,
+        app_id: &str,
+        secrets: Vec<String>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let client = make_http_client(app_id, None);
         let mut api_client = Self {
             client,
             app_id: app_id.to_string(),
-            user_auth_token: None,
+            secret: None,
         };
-        api_client.login(email, pwd).await?;
+        api_client.login(email, pwd, secrets).await?;
+        println!("Secret: {}", api_client.secret.clone().unwrap());
         Ok(api_client)
     }
 
-    async fn login(&mut self, email: &str, pwd: &str) -> Result<(), LoginError> {
+    async fn login(
+        &mut self,
+        email: &str,
+        pwd: &str,
+        secrets: Vec<String>,
+    ) -> Result<(), LoginError> {
         let params = [
             ("email", email),
             ("password", pwd),
@@ -57,15 +60,108 @@ impl ApiClient {
             _ => Err(LoginError::UnknownError),
         }?;
         let json: Value = resp.json().await.map_err(LoginError::ReqwestError)?;
-        // TODO: verify json["user"]["credential"]["parameters"] exists.
+        // verify json["user"]["credential"]["parameters"] exists.
         // If not, we are authenticating into a free account which can't download tracks.
+        // TODO: find a way to check without unwrap's.
+        println!(
+            "{}",
+            json.get("user")
+                .unwrap()
+                .get("credential")
+                .unwrap()
+                .get("parameters")
+                .unwrap()
+        );
         match json.get("user_auth_token") {
-            Some(token) => {
-                self.user_auth_token = Some(token.as_str().unwrap().to_string());
+            Some(Value::String(token)) => {
+                self.set_correct_secret(secrets).await?;
+                println!("{}", token);
+                self.client = make_http_client(&self.app_id, Some(token));
                 Ok(())
             }
-            None => Err(LoginError::NoUserAuthToken),
+            None | Some(_) => Err(LoginError::NoUserAuthToken),
         }
+    }
+
+    pub async fn get_track_file_url(
+        &self,
+        track_id: &str,
+    ) -> Result<Option<String>, Box<dyn Error>> {
+        let timestamp_now = chrono::Utc::now().timestamp().to_string();
+        let fmt_id = "6"; // TODO: add an option for this. Should be 5, 6, 7 or 27.
+
+        let r_sig = format!(
+            "trackgetFileUrlformat_id{}intentstreamtrack_id{}{}{}",
+            fmt_id,
+            track_id,
+            timestamp_now,
+            self.secret.as_ref().unwrap()
+        );
+
+        println!("{r_sig}");
+
+        let r_sig_hash = format!("{:?}", md5::compute(r_sig));
+        println!("Hash: {r_sig_hash}");
+
+        let params = [
+            ("request_ts", timestamp_now.as_str()),
+            ("request_sig", &r_sig_hash),
+            ("track_id", track_id),
+            ("format_id", fmt_id),
+            ("intent", "stream"),
+        ];
+        let res: GetUrlResponse =
+            serde_json::from_value(self.do_request("track/getFileUrl", &params).await?)?;
+        if res.sample {
+            return Ok(None);
+        }
+        Ok(Some(res.url))
+    }
+
+    async fn do_request(
+        &self,
+        path: &str,
+        params: &[(&str, &str)],
+    ) -> Result<Value, Box<dyn Error>> {
+        let url = format!("{API_URL}{path}");
+        let resp = self
+            .client
+            .get(&url)
+            .query(params)
+            .send()
+            .await
+            .map_err(|e| format!("Reqwest error: {}", e))?;
+        if resp.status() == reqwest::StatusCode::BAD_REQUEST {
+            return Err(format!("Invalid app secret: {}", self.app_id).into());
+        }
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err("Unauthorized".into());
+        }
+        let json: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Reqwest error: {}", e))?;
+        Ok(json)
+    }
+
+    async fn set_correct_secret(&mut self, secrets: Vec<String>) -> Result<(), LoginError> {
+        for secret in secrets {
+            if secret.is_empty() {
+                continue;
+            }
+            self.secret = Some(secret);
+            match self.get_track_file_url("64868958").await {
+                Ok(_) => {
+                    return Ok(());
+                }
+                Err(_) => {
+                    println!("A secret didn't work.");
+                    continue;
+                }
+            }
+        }
+        self.secret = None;
+        Err(LoginError::NoValidSecret)
     }
 }
 
@@ -76,6 +172,7 @@ pub enum LoginError {
     ReqwestError(reqwest::Error),
     NoUserAuthToken,
     UnknownError,
+    NoValidSecret,
 }
 
 impl Display for LoginError {
@@ -86,8 +183,39 @@ impl Display for LoginError {
             LoginError::ReqwestError(e) => write!(f, "Reqwest error: {}", e),
             LoginError::NoUserAuthToken => write!(f, "No user auth token"),
             LoginError::UnknownError => write!(f, "Unknown error"),
+            LoginError::NoValidSecret => write!(f, "No valid secret found"),
         }
     }
 }
 
 impl Error for LoginError {}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct GetUrlResponse {
+    #[serde(default = "default_sample")]
+    sample: bool,
+    bit_depth: u16, // TODO: object for bit depth
+    // sampling_rate
+    url: String,
+}
+
+const fn default_sample() -> bool {
+    false
+}
+
+fn make_http_client(app_id: &str, uat: Option<&str>) -> Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("X-App-Id", app_id.parse().expect("Failed to parse app id"));
+    headers.insert(
+        reqwest::header::CONTENT_TYPE,
+        "application/json;charset=UTF-8".parse().unwrap(),
+    );
+    if let Some(token) = uat {
+        headers.insert("X-User-Auth-Token", token.parse().unwrap());
+    }
+    reqwest::ClientBuilder::new()
+        .user_agent(API_USER_AGENT)
+        .default_headers(headers)
+        .build()
+        .unwrap()
+}
