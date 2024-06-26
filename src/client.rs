@@ -46,34 +46,27 @@ impl Client {
             ("password", pwd),
             ("app_id", &self.app_id),
         ];
-        let url = format!("{}{}", API_URL, "user/login");
         let resp = self
-            .client
-            .get(&url)
-            .query(&params)
-            .send()
+            .do_request("user/login", &params)
             .await
-            .map_err(LoginError::ReqwestError)?;
-        match resp.status() {
-            reqwest::StatusCode::OK => Ok(()),
-            reqwest::StatusCode::UNAUTHORIZED => Err(LoginError::InvalidCredentials),
-            reqwest::StatusCode::BAD_REQUEST => Err(LoginError::InvalidAppId),
-            _ => Err(LoginError::UnknownError),
-        }?;
-        let json: Value = resp.json().await.map_err(LoginError::ReqwestError)?;
+            .map_err(|e| match e.status() {
+                Some(reqwest::StatusCode::UNAUTHORIZED) => LoginError::InvalidCredentials,
+                Some(reqwest::StatusCode::BAD_REQUEST) => LoginError::InvalidAppId,
+                _ => LoginError::ReqwestError(e),
+            })?;
         // verify json["user"]["credential"]["parameters"] exists.
         // If not, we are authenticating into a free account which can't download tracks.
         // TODO: find a way to check without unwrap's.
         println!(
             "{}",
-            json.get("user")
+            resp.get("user")
                 .unwrap()
                 .get("credential")
                 .unwrap()
                 .get("parameters")
                 .unwrap()
         );
-        match json.get("user_auth_token") {
+        match resp.get("user_auth_token") {
             Some(Value::String(token)) => {
                 self.set_correct_secret(secrets).await?;
                 println!("{}", token);
@@ -168,11 +161,9 @@ pub enum LoginError {
     InvalidAppId,
     ReqwestError(reqwest::Error),
     NoUserAuthToken,
-    UnknownError,
     NoValidSecret,
     GetDownloadUrlError(GetDownloadUrlError),
 }
-
 impl Display for LoginError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -180,7 +171,6 @@ impl Display for LoginError {
             LoginError::InvalidAppId => write!(f, "Invalid app id"),
             LoginError::ReqwestError(e) => write!(f, "Reqwest error: {}", e),
             LoginError::NoUserAuthToken => write!(f, "No user auth token"),
-            LoginError::UnknownError => write!(f, "Unknown error"),
             LoginError::NoValidSecret => write!(f, "No valid secret found"),
             LoginError::GetDownloadUrlError(e) => write!(
                 f,
@@ -189,7 +179,6 @@ impl Display for LoginError {
         }
     }
 }
-
 impl Error for LoginError {}
 
 #[derive(Debug)]
