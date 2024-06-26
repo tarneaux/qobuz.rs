@@ -15,6 +15,15 @@ async fn main() {
     let client = Client::new(&email, &password, &app_id, secret)
         .await
         .unwrap();
+    println!("{:?}", client.get_playlist("22489221").await.unwrap());
+    println!("{:?}", client.get_track("176991285").await.unwrap());
+    println!(
+        "{:?}",
+        client
+            .get_user_favorites(qobuz::ItemType::Track)
+            .await
+            .unwrap()
+    );
     let url = client
         .get_track_file_url("64868955", Quality::HiRes96)
         .await

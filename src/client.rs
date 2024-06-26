@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt, fmt::Display, fmt::Formatter};
 
-use crate::quality::Quality;
+use crate::{quality::Quality, ItemType, Playlist, Track, Tracks};
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
@@ -34,9 +34,9 @@ impl Client {
 
     pub async fn get_track_file_url(
         &self,
-        track_id: &str,
+        track_id: &str, // TODO: u64?
         quality: Quality,
-    ) -> Result<DownloadUrl, GetDownloadUrlError> {
+    ) -> Result<DownloadUrl, ApiError> {
         let timestamp_now = chrono::Utc::now().timestamp().to_string();
 
         let quality_id: u8 = quality.into();
@@ -58,10 +58,61 @@ impl Client {
         ];
         let res = self.do_request("track/getFileUrl", &params).await?;
         if let Some(Value::Bool(true)) = res.get("sample") {
-            return Err(GetDownloadUrlError::IsSample);
+            return Err(ApiError::IsSample);
         }
         let res: DownloadUrl = serde_json::from_value(res)?;
         Ok(res)
+    }
+
+    pub async fn get_user_favorites(&self, fav_type: ItemType) -> Result<Tracks, ApiError> {
+        let timestamp_now = chrono::Utc::now().timestamp().to_string();
+        let r_sig_hash = format!(
+            "{:x}",
+            md5::compute(format!(
+                "favoritegetUserFavorites{timestamp_now}{}",
+                self.secret
+            ))
+        );
+        let fav_type = format!("{fav_type}s");
+        let params = [
+            ("type", fav_type.as_str()),
+            ("request_ts", &timestamp_now),
+            ("request_sig", &r_sig_hash),
+            ("limit", "500"),
+            ("offset", "0"), // TODO: walk
+        ];
+        let res = self
+            .do_request("favorite/getUserFavorites", &params)
+            .await?;
+        println!("{res}");
+        Ok(serde_json::from_value(
+            res.get("tracks")
+                .expect(
+                    "Couldn't get 'tracks' field from returned data while getting user favorites",
+                )
+                .clone(),
+        )?)
+    }
+
+    pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
+        let params = [("track_id", track_id)];
+        let res = self
+            .do_request("track/get", &params)
+            .await?;
+        Ok(serde_json::from_value(res)?)
+    }
+
+    pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
+        let params = [
+            ("extra", "tracks"),
+            ("playlist_id", playlist_id),
+            ("limit", "500"),
+            ("offset", "0"), // TODO: walk
+        ];
+        let res = self
+            .do_request("playlist/get", &params)
+            .await?;
+        Ok(serde_json::from_value(res)?)
     }
 
     async fn do_request(
@@ -73,7 +124,7 @@ impl Client {
     }
 }
 
-pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, GetDownloadUrlError> {
+pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError> {
     if secret.is_empty() {
         return Ok(false);
     }
@@ -85,8 +136,8 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, GetDownlo
         .get_track_file_url("64868958", Quality::HiRes192)
         .await
     {
-        Err(GetDownloadUrlError::IsSample) => Ok(true),
-        Err(GetDownloadUrlError::Reqwest(e)) => {
+        Err(ApiError::IsSample) => Ok(true),
+        Err(ApiError::Reqwest(e)) => {
             e.status().expect(&format!(
                 "Error while getting correct secret: returned error is unexpected {e}"
             ));
@@ -163,12 +214,12 @@ impl Display for LoginError {
 impl Error for LoginError {}
 
 #[derive(Debug)]
-pub enum GetDownloadUrlError {
+pub enum ApiError {
     IsSample,
     SerdeJson(serde_json::Error),
     Reqwest(reqwest::Error),
 }
-impl Display for GetDownloadUrlError {
+impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::IsSample => write!(f, "Downloadable file is a sample"),
@@ -177,13 +228,13 @@ impl Display for GetDownloadUrlError {
         }
     }
 }
-impl Error for GetDownloadUrlError {}
-impl From<serde_json::Error> for GetDownloadUrlError {
+impl Error for ApiError {}
+impl From<serde_json::Error> for ApiError {
     fn from(value: serde_json::Error) -> Self {
         Self::SerdeJson(value)
     }
 }
-impl From<reqwest::Error> for GetDownloadUrlError {
+impl From<reqwest::Error> for ApiError {
     fn from(value: reqwest::Error) -> Self {
         Self::Reqwest(value)
     }

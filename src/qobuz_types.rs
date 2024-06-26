@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,14 +39,12 @@ pub struct Playlist {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Owner {
     pub id: i64,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Tracks {
     pub items: Vec<Track>,
     pub limit: i64,
@@ -58,8 +56,6 @@ pub struct Tracks {
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub album: Album,
-    #[serde(rename = "audio_info")]
-    pub audio_info: AudioInfo,
     pub composer: Option<Composer>,
     pub copyright: String,
     pub displayable: bool,
@@ -69,16 +65,11 @@ pub struct Track {
     pub hires: bool,
     #[serde(rename = "hires_streamable")]
     pub hires_streamable: bool,
-    pub id: i64,
+    pub id: u64,
     pub isrc: String,
-    #[serde(rename = "maximum_bit_depth")]
-    pub maximum_bit_depth: i64,
-    #[serde(rename = "maximum_channel_count")]
-    pub maximum_channel_count: i64,
-    #[serde(rename = "maximum_sampling_rate")]
-    pub maximum_sampling_rate: f64,
-    #[serde(rename = "media_number")]
-    pub media_number: i64,
+    // May be needed later. seems to represent CD number.
+    // #[serde(rename = "media_number")]
+    // pub media_number: i64,
     #[serde(rename = "parental_warning")]
     pub parental_warning: bool,
     pub performer: Performer,
@@ -92,11 +83,9 @@ pub struct Track {
     pub released: NaiveDate,
     pub sampleable: bool,
     pub streamable: bool,
-    #[serde(rename = "streamable_at")]
-    pub streamable_at: i64,
     pub title: String,
     #[serde(rename = "track_number")]
-    pub track_number: i64,
+    pub track_number: u64,
     pub version: Option<String>,
     pub work: Option<String>,
 }
@@ -115,19 +104,18 @@ pub struct Album {
     pub hires_streamable: bool,
     pub image: Image,
     pub label: Label,
-    #[serde(rename = "media_count")]
-    pub media_count: i64,
+    // May be needed later. seems to represent number of CD's.
+    // #[serde(rename = "media_count")]
+    // pub media_count: i64,
     #[serde(rename = "qobuz_id")]
-    pub id: i64,
+    pub id: u64,
     #[serde(rename = "release_date_original")]
     pub released: NaiveDate,
     pub sampleable: bool,
     pub streamable: bool,
-    #[serde(rename = "streamable_at")]
-    pub streamable_at: i64,
     pub title: String,
     #[serde(rename = "tracks_count")]
-    pub tracks_count: i64,
+    pub tracks_count: u64,
     pub upc: String,
     pub version: Option<String>,
 }
@@ -136,7 +124,7 @@ pub struct Album {
 #[serde(rename_all = "camelCase")]
 pub struct Artist {
     #[serde(rename = "albums_count")]
-    pub albums_count: i64,
+    pub albums_count: u64,
     pub id: i64,
     pub image: Value,
     pub name: String,
@@ -148,9 +136,9 @@ pub struct Artist {
 #[serde(rename_all = "camelCase")]
 pub struct Genre {
     pub color: String,
-    pub id: i64,
+    pub id: u64,
     pub name: String,
-    pub path: Vec<i64>,
+    // pub path: Vec<i64>,
     pub slug: String,
 }
 
@@ -166,34 +154,25 @@ pub struct Image {
 #[serde(rename_all = "camelCase")]
 pub struct Label {
     #[serde(rename = "albums_count")]
-    pub albums_count: i64,
-    pub id: i64,
+    pub albums_count: u64,
+    pub id: u64,
     pub name: String,
     pub slug: String,
     #[serde(rename = "supplier_id")]
-    pub supplier_id: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioInfo {
-    #[serde(rename = "replaygain_track_gain")]
-    pub replaygain_track_gain: f64,
-    #[serde(rename = "replaygain_track_peak")]
-    pub replaygain_track_peak: f64,
+    pub supplier_id: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Composer {
-    pub id: i64,
+    pub id: u64,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Performer {
-    pub id: i64,
+    pub id: u64,
     pub name: String,
 }
 
@@ -232,5 +211,26 @@ mod ser_duration_u64 {
         D: Deserializer<'de>,
     {
         Ok(Duration::from_secs(u64::deserialize(deserializer)?))
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum ItemType {
+    Track,
+    Album,
+    Artist,
+}
+
+impl Display for ItemType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Track => "track",
+                Self::Album => "album",
+                Self::Artist => "artist",
+            },
+        )
     }
 }
