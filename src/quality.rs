@@ -2,7 +2,7 @@ use core::fmt::{self, Display, Formatter};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(try_from = "u8")]
 #[serde(into = "u8")]
 pub enum Quality {
