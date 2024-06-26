@@ -21,23 +21,10 @@ impl Client {
         email: &str,
         pwd: &str,
         app_id: &str,
-        secrets: Vec<String>,
-    ) -> Result<Self, Box<dyn Error>> {
+        secret: String,
+    ) -> Result<Self, LoginError> {
         let token = get_auth_token(email, pwd, app_id).await?;
         let reqwest_client = make_http_client(app_id, Some(&token));
-
-        // TODO: Only take one secret and return an error if it fails. Then add another function or
-        // method that gets the first valid secret based on a Vec of secrets.
-
-        // We can't use `iter().find()` here since `test_secret()` is async.
-        let mut secret = None;
-        for tested_secret in secrets {
-            if test_secret(reqwest_client.clone(), tested_secret.to_string()).await? {
-                secret = Some(tested_secret);
-                break;
-            }
-        }
-        let secret = secret.ok_or(NoValidSecret)?;
 
         Ok(Self {
             reqwest_client,
@@ -86,28 +73,28 @@ impl Client {
     }
 }
 
-async fn test_secret(reqwest_client: reqwest::Client, secret: String) -> Result<bool, LoginError> {
+pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, GetDownloadUrlError> {
     if secret.is_empty() {
         return Ok(false);
     }
     let client = Client {
-        reqwest_client,
+        reqwest_client: make_http_client(app_id, None),
         secret,
     };
     match client
         .get_track_file_url("64868958", Quality::HiRes192)
         .await
     {
-        Ok(_) => Ok(true),
-        // Since the X-User-Auth-Token header is set, we can't get a sample URL.
-        Err(GetDownloadUrlError::IsSample) => unreachable!(),
+        Err(GetDownloadUrlError::IsSample) => Ok(true),
         Err(GetDownloadUrlError::Reqwest(e)) => {
             e.status().expect(&format!(
                 "Error while getting correct secret: returned error is unexpected {e}"
             ));
             Ok(false)
         }
-        Err(e) => return Err(LoginError::GetDownloadUrlError(e)),
+        Err(e) => return Err(e),
+        // Since the X-User-Auth-Token header isn't set, we can't get a non-sample URL.
+        Ok(_) => unreachable!(),
     }
 }
 
@@ -157,7 +144,6 @@ pub enum LoginError {
     InvalidAppId,
     ReqwestError(reqwest::Error),
     NoUserAuthToken,
-    GetDownloadUrlError(GetDownloadUrlError),
     FreeAccount,
 }
 impl Display for LoginError {
@@ -167,10 +153,6 @@ impl Display for LoginError {
             LoginError::InvalidAppId => write!(f, "Invalid app id"),
             LoginError::ReqwestError(e) => write!(f, "Reqwest error: {}", e),
             LoginError::NoUserAuthToken => write!(f, "No user auth token"),
-            LoginError::GetDownloadUrlError(e) => write!(
-                f,
-                "Error while trying to get download URL to test token: {e}"
-            ),
             LoginError::FreeAccount => write!(
                 f,
                 "Tried to authenticate into a free account, which can't download tracks."
@@ -179,15 +161,6 @@ impl Display for LoginError {
     }
 }
 impl Error for LoginError {}
-
-#[derive(Debug)]
-struct NoValidSecret;
-impl Display for NoValidSecret {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "No valid secret found")
-    }
-}
-impl Error for NoValidSecret {}
 
 #[derive(Debug)]
 pub enum GetDownloadUrlError {

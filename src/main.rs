@@ -10,16 +10,11 @@ async fn main() {
     let email = env::var("EMAIL").expect("No $EMAIL");
     let password = env::var("PASSWORD").expect("No $PASSWORD");
     let app_id = env::var("APP_ID").expect("No $APP_ID");
-    let secrets = env::var("SECRETS")
-        .expect("No $SECRETS")
-        .split(',')
-        .map(|s| s.to_string())
-        .collect();
+    let secret = env::var("SECRET").expect("No $SECRET");
     println!("Got env vars, now logging in.");
-    let client = Client::new(&email, &password, &app_id, secrets)
+    let client = Client::new(&email, &password, &app_id, secret)
         .await
         .unwrap();
-    println!("{:?}", client);
     let url = client
         .get_track_file_url("64868955", Quality::HiRes96)
         .await
