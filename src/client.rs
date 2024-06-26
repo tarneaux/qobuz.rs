@@ -59,10 +59,7 @@ impl Client {
             quality_id, track_id, timestamp_now, self.secret
         );
 
-        println!("{r_sig}");
-
         let r_sig_hash = format!("{:x}", md5::compute(r_sig));
-        println!("Hash: {r_sig_hash}");
 
         let params = [
             ("request_ts", timestamp_now.as_str()),
