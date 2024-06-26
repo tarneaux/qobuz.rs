@@ -1,5 +1,5 @@
 mod core;
-use crate::core::ApiClient;
+use crate::core::{ApiClient, Quality};
 use futures::StreamExt;
 use tokio::fs::File;
 use tokio::{self};
@@ -22,11 +22,16 @@ async fn main() {
         .unwrap();
     println!("{:?}", client);
     let url = client
-        .get_track_file_url("176991285")
+        .get_track_file_url("64868955", Quality::HiRes96)
+        .await
+        .unwrap();
+    let mut byte_stream = client
+        .client
+        .get(url.inner)
+        .send()
         .await
         .unwrap()
-        .unwrap();
-    let mut byte_stream = client.client.get(url).send().await.unwrap().bytes_stream();
+        .bytes_stream();
     let mut out = File::create("test.mp3")
         .await
         .expect("failed to create file");

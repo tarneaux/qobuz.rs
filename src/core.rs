@@ -86,13 +86,15 @@ impl ApiClient {
     pub async fn get_track_file_url(
         &self,
         track_id: &str,
-    ) -> Result<Option<String>, Box<dyn Error>> {
+        quality: Quality,
+    ) -> Result<DownloadUrl, GetDownloadUrlError> {
         let timestamp_now = chrono::Utc::now().timestamp().to_string();
-        let fmt_id = "6"; // TODO: add an option for this. Should be 5, 6, 7 or 27.
+
+        let quality_id: u8 = quality.into();
 
         let r_sig = format!(
             "trackgetFileUrlformat_id{}intentstreamtrack_id{}{}{}",
-            fmt_id,
+            quality_id,
             track_id,
             timestamp_now,
             self.secret.as_ref().unwrap()
@@ -100,47 +102,38 @@ impl ApiClient {
 
         println!("{r_sig}");
 
-        let r_sig_hash = format!("{:?}", md5::compute(r_sig));
+        let r_sig_hash = format!("{:x}", md5::compute(r_sig));
         println!("Hash: {r_sig_hash}");
 
         let params = [
             ("request_ts", timestamp_now.as_str()),
             ("request_sig", &r_sig_hash),
             ("track_id", track_id),
-            ("format_id", fmt_id),
+            ("format_id", &quality_id.to_string()),
             ("intent", "stream"),
         ];
-        let res: GetUrlResponse =
-            serde_json::from_value(self.do_request("track/getFileUrl", &params).await?)?;
-        if res.sample {
-            return Ok(None);
+        let res = self.do_request("track/getFileUrl", &params).await?;
+        if let Some(Value::Bool(true)) = res.get("sample") {
+            return Err(GetDownloadUrlError::IsSample);
         }
-        Ok(Some(res.url))
+        let res: DownloadUrl = serde_json::from_value(res)?;
+        Ok(res)
     }
 
     async fn do_request(
         &self,
         path: &str,
         params: &[(&str, &str)],
-    ) -> Result<Value, Box<dyn Error>> {
+    ) -> Result<Value, reqwest::Error> {
         let url = format!("{API_URL}{path}");
         let resp = self
             .client
             .get(&url)
             .query(params)
             .send()
-            .await
-            .map_err(|e| format!("Reqwest error: {}", e))?;
-        if resp.status() == reqwest::StatusCode::BAD_REQUEST {
-            return Err(format!("Invalid app secret: {}", self.app_id).into());
-        }
-        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err("Unauthorized".into());
-        }
-        let json: Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("Reqwest error: {}", e))?;
+            .await?
+            .error_for_status()?;
+        let json: Value = resp.json().await?;
         Ok(json)
     }
 
@@ -150,14 +143,17 @@ impl ApiClient {
                 continue;
             }
             self.secret = Some(secret);
-            match self.get_track_file_url("64868958").await {
-                Ok(_) => {
-                    return Ok(());
-                }
-                Err(_) => {
-                    println!("A secret didn't work.");
+            match self.get_track_file_url("64868958", Quality::HiRes192).await {
+                Err(GetDownloadUrlError::IsSample) => return Ok(()),
+                Err(GetDownloadUrlError::Reqwest(e)) => {
+                    e.status().expect(&format!(
+                        "Error while getting correct secret: returned error is unexpected {e}"
+                    ));
                     continue;
                 }
+                Err(e) => return Err(LoginError::GetDownloadUrlError(e)),
+                // Since the X-User-Auth-Token header isn't set yet, we can't get a non-sample URL.
+                Ok(_) => unreachable!(),
             }
         }
         self.secret = None;
@@ -173,6 +169,7 @@ pub enum LoginError {
     NoUserAuthToken,
     UnknownError,
     NoValidSecret,
+    GetDownloadUrlError(GetDownloadUrlError),
 }
 
 impl Display for LoginError {
@@ -184,23 +181,102 @@ impl Display for LoginError {
             LoginError::NoUserAuthToken => write!(f, "No user auth token"),
             LoginError::UnknownError => write!(f, "Unknown error"),
             LoginError::NoValidSecret => write!(f, "No valid secret found"),
+            LoginError::GetDownloadUrlError(e) => write!(
+                f,
+                "Error while trying to get download URL to test token: {e}"
+            ),
         }
     }
 }
 
 impl Error for LoginError {}
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-struct GetUrlResponse {
-    #[serde(default = "default_sample")]
-    sample: bool,
-    bit_depth: u16, // TODO: object for bit depth
-    // sampling_rate
-    url: String,
+#[derive(Debug)]
+pub enum GetDownloadUrlError {
+    IsSample,
+    SerdeJson(serde_json::Error),
+    Reqwest(reqwest::Error),
+}
+impl Display for GetDownloadUrlError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IsSample => write!(f, "Downloadable file is a sample"),
+            Self::SerdeJson(e) => write!(f, "Serde error: {e}"),
+            Self::Reqwest(e) => write!(f, "Reqwest error: {e}"),
+        }
+    }
+}
+impl Error for GetDownloadUrlError {}
+impl From<serde_json::Error> for GetDownloadUrlError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::SerdeJson(value)
+    }
+}
+impl From<reqwest::Error> for GetDownloadUrlError {
+    fn from(value: reqwest::Error) -> Self {
+        Self::Reqwest(value)
+    }
 }
 
-const fn default_sample() -> bool {
-    false
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(try_from = "u8")]
+#[serde(into = "u8")]
+pub enum Quality {
+    Mp3,
+    Cd,
+    HiRes96,
+    HiRes192,
+}
+
+impl Display for Quality {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Mp3 => write!(f, "MP3 320"),
+            Self::Cd => write!(f, "CD / Lossless"),
+            Self::HiRes96 => write!(f, "Hi-Res 24-bit, up to 96 kHz"),
+            Self::HiRes192 => write!(f, "Hi-Res 24-bit, up to 192 kHz"),
+        }
+    }
+}
+
+impl TryFrom<u8> for Quality {
+    type Error = InvalidQualityError;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            5 => Ok(Self::Mp3),
+            6 => Ok(Self::Cd),
+            7 => Ok(Self::HiRes96),
+            27 => Ok(Self::HiRes192),
+            v => Err(InvalidQualityError(v)),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidQualityError(u8);
+impl Display for InvalidQualityError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid quality: {}", self.0)
+    }
+}
+impl Error for InvalidQualityError {}
+
+impl Into<u8> for Quality {
+    fn into(self) -> u8 {
+        match self {
+            Self::Mp3 => 5,
+            Self::Cd => 6,
+            Self::HiRes96 => 7,
+            Self::HiRes192 => 27,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct DownloadUrl {
+    #[serde(rename = "url")]
+    pub inner: String,
+    pub format_id: Quality,
 }
 
 fn make_http_client(app_id: &str, uat: Option<&str>) -> Client {
