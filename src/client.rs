@@ -84,7 +84,7 @@ impl Client {
             .await?;
         Ok(serde_json::from_value(
             res.get(fav_type)
-                .expect(&format!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
+                .unwrap_or_else(|| panic!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
                 .clone(),
         )?)
     }
@@ -147,14 +147,14 @@ async fn do_request<T: DeserializeOwned>(
     path: &str,
     params: &[(&str, &str)],
 ) -> Result<T, reqwest::Error> {
-    let url = format!("{API_URL}{path}");
-    let resp = client
-        .get(&url)
+    client
+        .get(format!("{API_URL}{path}"))
         .query(params)
         .send()
         .await?
-        .error_for_status()?;
-    Ok(resp.json().await?)
+        .error_for_status()?
+        .json()
+        .await
 }
 
 async fn get_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginError> {
@@ -274,12 +274,12 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError>
     {
         Err(ApiError::IsSample) => Ok(true),
         Err(ApiError::Reqwest(e)) => {
-            e.status().expect(&format!(
-                "Error while getting correct secret: returned error is unexpected {e}"
-            ));
+            e.status().unwrap_or_else(|| {
+                panic!("Error while getting correct secret: returned error is unexpected {e}")
+            });
             Ok(false)
         }
-        Err(e) => return Err(e),
+        Err(e) => Err(e),
         // Since the X-User-Auth-Token header isn't set, we can't get a non-sample URL.
         Ok(_) => unreachable!(),
     }

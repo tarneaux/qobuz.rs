@@ -45,13 +45,13 @@ impl Display for InvalidQualityError {
 }
 impl Error for InvalidQualityError {}
 
-impl Into<u8> for Quality {
-    fn into(self) -> u8 {
-        match self {
-            Self::Mp3 => 5,
-            Self::Cd => 6,
-            Self::HiRes96 => 7,
-            Self::HiRes192 => 27,
+impl From<Quality> for u8 {
+    fn from(val: Quality) -> Self {
+        match val {
+            Quality::Mp3 => 5,
+            Quality::Cd => 6,
+            Quality::HiRes96 => 7,
+            Quality::HiRes192 => 27,
         }
     }
 }
