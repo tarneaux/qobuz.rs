@@ -1,8 +1,8 @@
-use std::error::Error;
-
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
-use std::{fmt, fmt::Display, fmt::Formatter};
+use std::env::VarError;
+use std::error::Error;
+use std::{env, fmt, fmt::Display, fmt::Formatter};
 
 use crate::{quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
 
@@ -17,21 +17,18 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new(
-        email: &str,
-        pwd: &str,
-        app_id: &str,
-        secret: String,
-    ) -> Result<Self, LoginError> {
-        let token = get_auth_token(email, pwd, app_id).await?;
-        let reqwest_client = make_http_client(app_id, Some(&token));
+    /// Create a new client, logging in with the given credentials.
+    pub async fn new(credentials: QobuzCredentials) -> Result<Self, LoginError> {
+        let token = get_auth_token(&credentials).await?;
+        let reqwest_client = make_http_client(&credentials.app_id, Some(&token));
 
         Ok(Self {
             reqwest_client,
-            secret,
+            secret: credentials.secret,
         })
     }
 
+    /// Get the download URL of a track.
     pub async fn get_track_file_url(
         &self,
         track_id: &str, // TODO: u64?
@@ -64,6 +61,7 @@ impl Client {
         Ok(res)
     }
 
+    /// Get the user's favorites of type `T`.
     pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Array<T>, ApiError> {
         let timestamp_now = chrono::Utc::now().timestamp().to_string();
         let r_sig_hash = format!(
@@ -91,12 +89,14 @@ impl Client {
         )?)
     }
 
+    /// Get information on a track.
     pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
         let params = [("track_id", track_id)];
         let res = self.do_request("track/get", &params).await?;
         Ok(serde_json::from_value(res)?)
     }
 
+    /// Get information on a playlist.
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
         self.do_request(
             "playlist/get",
@@ -111,12 +111,14 @@ impl Client {
         .map_err(|e| e.into())
     }
 
+    /// Get information on an album.
     pub async fn get_album(&self, album_id: &str) -> Result<Album, ApiError> {
         self.do_request("album/get", &[("album_id", album_id)])
             .await
             .map_err(|e| e.into())
     }
 
+    /// Get information on an artist.
     pub async fn get_artist(&self, artist_id: &str) -> Result<Artist, ApiError> {
         self.do_request(
             "artist/get",
@@ -155,9 +157,13 @@ async fn do_request<T: DeserializeOwned>(
     Ok(resp.json().await?)
 }
 
-async fn get_auth_token(email: &str, pwd: &str, app_id: &str) -> Result<String, LoginError> {
-    let client = make_http_client(app_id, None);
-    let params = [("email", email), ("password", pwd), ("app_id", &app_id)];
+async fn get_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginError> {
+    let client = make_http_client(&credentials.app_id, None);
+    let params = [
+        ("email", credentials.email.as_str()),
+        ("password", credentials.password.as_str()),
+        ("app_id", credentials.app_id.as_str()),
+    ];
     let resp: Value = do_request(&client, "user/login", &params)
         .await
         .map_err(|e| match e.status() {
@@ -276,5 +282,28 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError>
         Err(e) => return Err(e),
         // Since the X-User-Auth-Token header isn't set, we can't get a non-sample URL.
         Ok(_) => unreachable!(),
+    }
+}
+
+pub struct QobuzCredentials {
+    email: String,
+    password: String,
+    app_id: String,
+    secret: String,
+}
+
+impl QobuzCredentials {
+    /// Get the credentials from environment variables.
+    ///
+    /// # Errors
+    ///
+    /// If an environment variable is missing.
+    pub fn from_env() -> Result<Self, VarError> {
+        Ok(Self {
+            email: env::var("EMAIL")?,
+            password: env::var("PASSWORD")?,
+            app_id: env::var("APP_ID")?,
+            secret: env::var("SECRET")?,
+        })
     }
 }

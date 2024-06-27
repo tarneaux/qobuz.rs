@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use qobuz::{Album, Client, Quality};
+use qobuz::{Album, Client, QobuzCredentials, Quality, Track};
 use tokio::fs::File;
 use tokio::{self};
 
@@ -7,12 +7,8 @@ use std::env;
 
 #[tokio::main]
 async fn main() {
-    let email = env::var("EMAIL").expect("No $EMAIL");
-    let password = env::var("PASSWORD").expect("No $PASSWORD");
-    let app_id = env::var("APP_ID").expect("No $APP_ID");
-    let secret = env::var("SECRET").expect("No $SECRET");
     println!("Got env vars, now logging in.");
-    let client = Client::new(&email, &password, &app_id, secret)
+    let client = Client::new(QobuzCredentials::from_env().unwrap())
         .await
         .unwrap();
     println!("{:?}", client.get_playlist("22489221").await.unwrap());
