@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt, fmt::Display, fmt::Formatter};
 
@@ -56,7 +56,7 @@ impl Client {
             ("format_id", &quality_id.to_string()),
             ("intent", "stream"),
         ];
-        let res = self.do_request("track/getFileUrl", &params).await?;
+        let res: Value = self.do_request("track/getFileUrl", &params).await?;
         if let Some(Value::Bool(true)) = res.get("sample") {
             return Err(ApiError::IsSample);
         }
@@ -81,7 +81,7 @@ impl Client {
             ("limit", "500"),
             ("offset", "0"), // TODO: walk
         ];
-        let res = self
+        let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
             .await?;
         println!("{res}");
@@ -99,21 +99,24 @@ impl Client {
     }
 
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
-        let params = [
-            ("extra", "tracks"),
-            ("playlist_id", playlist_id),
-            ("limit", "500"),
-            ("offset", "0"), // TODO: walk
-        ];
-        let res = self.do_request("playlist/get", &params).await?;
-        Ok(serde_json::from_value(res)?)
+        self.do_request(
+            "playlist/get",
+            &[
+                ("extra", "tracks"),
+                ("playlist_id", playlist_id),
+                ("limit", "500"),
+                ("offset", "0"), // TODO: walk
+            ],
+        )
+        .await
+        .map_err(|e| e.into())
     }
 
-    async fn do_request(
+    async fn do_request<T: DeserializeOwned>(
         &self,
         path: &str,
         params: &[(&str, &str)],
-    ) -> Result<Value, reqwest::Error> {
+    ) -> Result<T, reqwest::Error> {
         do_request(&self.reqwest_client, path, params).await
     }
 }
@@ -142,12 +145,11 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError>
         Ok(_) => unreachable!(),
     }
 }
-
-async fn do_request(
+async fn do_request<T: DeserializeOwned>(
     client: &reqwest::Client,
     path: &str,
     params: &[(&str, &str)],
-) -> Result<Value, reqwest::Error> {
+) -> Result<T, reqwest::Error> {
     let url = format!("{API_URL}{path}");
     let resp = client
         .get(&url)
@@ -155,14 +157,13 @@ async fn do_request(
         .send()
         .await?
         .error_for_status()?;
-    let json: Value = resp.json().await?;
-    Ok(json)
+    Ok(resp.json().await?)
 }
 
 async fn get_auth_token(email: &str, pwd: &str, app_id: &str) -> Result<String, LoginError> {
     let client = make_http_client(app_id, None);
     let params = [("email", email), ("password", pwd), ("app_id", &app_id)];
-    let resp = do_request(&client, "user/login", &params)
+    let resp: Value = do_request(&client, "user/login", &params)
         .await
         .map_err(|e| match e.status() {
             Some(reqwest::StatusCode::UNAUTHORIZED) => LoginError::InvalidCredentials,
