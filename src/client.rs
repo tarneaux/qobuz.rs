@@ -309,3 +309,27 @@ impl QobuzCredentials {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+    #[test]
+    async fn test_client() {
+        let credentials = QobuzCredentials::from_env()
+            .expect("Couldn't get credentials env variables which need to be set for this test.");
+        println!("{:?}", credentials);
+        let client = Client::new(credentials).await.unwrap();
+        client.get_user_favorites::<Album>().await.unwrap();
+        client.get_user_favorites::<Track>().await.unwrap();
+        client.get_user_favorites::<Artist>().await.unwrap();
+        client
+            .get_track_file_url("64868955", Quality::HiRes96)
+            .await
+            .unwrap();
+        client.get_track("64868955").await.unwrap();
+        client.get_album("trrcz9pvaaz6b").await.unwrap();
+        client.get_artist("26390").await.unwrap();
+    }
+}
