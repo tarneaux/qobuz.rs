@@ -285,11 +285,13 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError>
     }
 }
 
+/// Credentials for Qobuz.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QobuzCredentials {
-    email: String,
-    password: String,
-    app_id: String,
-    secret: String,
+    pub email: String,
+    pub password: String,
+    pub app_id: String,
+    pub secret: String,
 }
 
 impl QobuzCredentials {
