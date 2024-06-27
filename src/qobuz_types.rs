@@ -29,9 +29,7 @@ pub struct Playlist {
     #[serde(rename = "published_to")]
     pub published_to: Value,
     pub slug: String,
-    pub tracks: Tracks,
-    #[serde(rename = "tracks_count")]
-    pub tracks_count: u64,
+    pub tracks: Option<Array<Track>>,
     #[serde(rename = "updated_at")]
     pub updated_at: u64,
     #[serde(rename = "users_count")]
@@ -45,8 +43,8 @@ pub struct Owner {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Tracks {
-    pub items: Vec<Track>,
+pub struct Array<T> {
+    pub items: Vec<T>,
     pub limit: i64,
     pub offset: i64,
     pub total: i64,
@@ -55,7 +53,7 @@ pub struct Tracks {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
-    pub album: Album,
+    pub album: Option<Album>,
     pub composer: Option<Composer>,
     pub copyright: String,
     pub displayable: bool,
@@ -107,17 +105,15 @@ pub struct Album {
     // May be needed later. seems to represent number of CD's.
     // #[serde(rename = "media_count")]
     // pub media_count: i64,
-    #[serde(rename = "qobuz_id")]
-    pub id: u64,
+    pub id: String,
     #[serde(rename = "release_date_original")]
     pub released: NaiveDate,
     pub sampleable: bool,
     pub streamable: bool,
     pub title: String,
-    #[serde(rename = "tracks_count")]
-    pub tracks_count: u64,
     pub upc: String,
     pub version: Option<String>,
+    pub tracks: Option<Array<Track>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,6 +126,7 @@ pub struct Artist {
     pub name: String,
     pub picture: Value,
     pub slug: String,
+    pub albums: Option<Array<Album>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,6 +173,28 @@ pub struct Performer {
     pub name: String,
 }
 
+pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
+    fn name_plural<'b>() -> &'b str;
+}
+
+impl QobuzType for Album {
+    fn name_plural<'b>() -> &'b str {
+        "albums"
+    }
+}
+
+impl QobuzType for Track {
+    fn name_plural<'b>() -> &'b str {
+        "tracks"
+    }
+}
+
+impl QobuzType for Artist {
+    fn name_plural<'b>() -> &'b str {
+        "artist"
+    }
+}
+
 mod ser_datetime_i64 {
     use chrono::{DateTime, Utc};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -211,26 +230,5 @@ mod ser_duration_u64 {
         D: Deserializer<'de>,
     {
         Ok(Duration::from_secs(u64::deserialize(deserializer)?))
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum ItemType {
-    Track,
-    Album,
-    Artist,
-}
-
-impl Display for ItemType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Track => "track",
-                Self::Album => "album",
-                Self::Artist => "artist",
-            },
-        )
     }
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt, fmt::Display, fmt::Formatter};
 
-use crate::{quality::Quality, ItemType, Playlist, Track, Tracks};
+use crate::{quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
@@ -64,7 +64,7 @@ impl Client {
         Ok(res)
     }
 
-    pub async fn get_user_favorites(&self, fav_type: ItemType) -> Result<Tracks, ApiError> {
+    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Array<T>, ApiError> {
         let timestamp_now = chrono::Utc::now().timestamp().to_string();
         let r_sig_hash = format!(
             "{:x}",
@@ -73,9 +73,9 @@ impl Client {
                 self.secret
             ))
         );
-        let fav_type = format!("{fav_type}s");
+        let fav_type = T::name_plural();
         let params = [
-            ("type", fav_type.as_str()),
+            ("type", fav_type),
             ("request_ts", &timestamp_now),
             ("request_sig", &r_sig_hash),
             ("limit", "500"),
@@ -86,19 +86,15 @@ impl Client {
             .await?;
         println!("{res}");
         Ok(serde_json::from_value(
-            res.get("tracks")
-                .expect(
-                    "Couldn't get 'tracks' field from returned data while getting user favorites",
-                )
+            res.get(fav_type)
+                .expect(&format!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
                 .clone(),
         )?)
     }
 
     pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
         let params = [("track_id", track_id)];
-        let res = self
-            .do_request("track/get", &params)
-            .await?;
+        let res = self.do_request("track/get", &params).await?;
         Ok(serde_json::from_value(res)?)
     }
 
@@ -109,9 +105,7 @@ impl Client {
             ("limit", "500"),
             ("offset", "0"), // TODO: walk
         ];
-        let res = self
-            .do_request("playlist/get", &params)
-            .await?;
+        let res = self.do_request("playlist/get", &params).await?;
         Ok(serde_json::from_value(res)?)
     }
 
