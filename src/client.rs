@@ -295,17 +295,17 @@ pub struct QobuzCredentials {
 }
 
 impl QobuzCredentials {
-    /// Get the credentials from environment variables.
+    /// Get the credentials from environment variables (`QOBUZ_*`).
     ///
     /// # Errors
     ///
     /// If an environment variable is missing.
     pub fn from_env() -> Result<Self, VarError> {
         Ok(Self {
-            email: env::var("EMAIL")?,
-            password: env::var("PASSWORD")?,
-            app_id: env::var("APP_ID")?,
-            secret: env::var("SECRET")?,
+            email: env::var("QOBUZ_EMAIL")?,
+            password: env::var("QOBUZ_PASSWORD")?,
+            app_id: env::var("QOBUZ_APP_ID")?,
+            secret: env::var("QOBUZ_SECRET")?,
         })
     }
 }
