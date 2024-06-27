@@ -84,7 +84,6 @@ impl Client {
         let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
             .await?;
-        println!("{res}");
         Ok(serde_json::from_value(
             res.get(fav_type)
                 .expect(&format!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
