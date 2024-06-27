@@ -112,6 +112,26 @@ impl Client {
         .map_err(|e| e.into())
     }
 
+    pub async fn get_album(&self, album_id: &str) -> Result<Album, ApiError> {
+        self.do_request("album/get", &[("album_id", album_id)])
+            .await
+            .map_err(|e| e.into())
+    }
+
+    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist, ApiError> {
+        self.do_request(
+            "artist/get",
+            &[
+                ("artist_id", artist_id),
+                ("limit", "500"),
+                ("offset", "0"), // TODO: walk
+                ("extra", "albums"),
+            ],
+        )
+        .await
+        .map_err(|e| e.into())
+    }
+
     async fn do_request<T: DeserializeOwned>(
         &self,
         path: &str,
