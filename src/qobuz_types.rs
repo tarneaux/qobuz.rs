@@ -11,7 +11,7 @@ pub struct Playlist {
     pub description: String,
     #[serde(with = "ser_duration_u64")]
     pub duration: Duration,
-    pub genres: Vec<Value>,
+    pub genres: Vec<String>,
     pub id: u64,
     pub images: Vec<String>,
     pub images150: Vec<String>,
@@ -24,10 +24,6 @@ pub struct Playlist {
     pub is_public: bool,
     pub name: String,
     pub owner: Owner,
-    #[serde(rename = "published_from")]
-    pub published_from: Value,
-    #[serde(rename = "published_to")]
-    pub published_to: Value,
     pub slug: String,
     pub tracks: Option<Array<Track>>,
     #[serde(rename = "updated_at")]
@@ -124,7 +120,6 @@ pub struct Artist {
     pub id: i64,
     pub image: Value,
     pub name: String,
-    pub picture: Value,
     pub slug: String,
     pub albums: Option<Array<Album>>,
 }
@@ -191,7 +186,7 @@ impl QobuzType for Track {
 
 impl QobuzType for Artist {
     fn name_plural<'b>() -> &'b str {
-        "artist"
+        "artists"
     }
 }
 
