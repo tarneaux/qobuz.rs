@@ -1,3 +1,5 @@
+use bytes::Bytes;
+use futures::Stream;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::env::VarError;
@@ -131,6 +133,21 @@ impl Client {
         )
         .await
         .map_err(|e| e.into())
+    }
+
+    /// Stream a track.
+    pub async fn stream_track(
+        &self,
+        track_id: &str,
+        quality: Quality,
+    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, ApiError> {
+        let url = self.get_track_file_url(track_id, quality).await?;
+        Ok(self
+            .reqwest_client
+            .get(url.inner)
+            .send()
+            .await?
+            .bytes_stream())
     }
 
     async fn do_request<T: DeserializeOwned>(
@@ -313,6 +330,7 @@ impl QobuzCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use tokio::test;
 
     #[test]
@@ -331,5 +349,11 @@ mod tests {
         client.get_track("64868955").await.unwrap();
         client.get_album("trrcz9pvaaz6b").await.unwrap();
         client.get_artist("26390").await.unwrap();
+        let mut stream = client
+            .stream_track("64868955", Quality::HiRes96)
+            .await
+            .unwrap();
+        assert!(stream.next().await.is_some());
+        client.get_track("no").await.unwrap_err();
     }
 }
