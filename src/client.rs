@@ -6,7 +6,9 @@ use std::env::VarError;
 use std::error::Error;
 use std::{env, fmt, fmt::Display, fmt::Formatter};
 
-use crate::{quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
+use crate::{
+    extra, quality::Quality, Album, Array, Artist, Playlist, PlaylistWithExtra, QobuzType, Track,
+};
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
@@ -100,13 +102,22 @@ impl Client {
 
     /// Get information on a playlist.
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
+        let count = self
+            .do_request::<PlaylistWithExtra<extra::TracksCount>>(
+                "playlist/get",
+                &[("playlist_id", playlist_id)],
+            )
+            .await?
+            .extra
+            .tracks_count;
+        // TODO: Global configuration for track count ?
         self.do_request(
             "playlist/get",
             &[
                 ("extra", "tracks"),
                 ("playlist_id", playlist_id),
-                ("limit", "500"),
-                ("offset", "0"), // TODO: walk
+                ("limit", &count.to_string()),
+                ("offset", "0"),
             ],
         )
         .await

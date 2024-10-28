@@ -14,3 +14,4 @@ reqwest = { version = "0.11.18", features = ["json", "stream"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.100"
 tokio = { version = "1.38.0", features = ["full"] }
+url = { version = "2.5.2", features = ["serde"] }
