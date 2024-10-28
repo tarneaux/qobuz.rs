@@ -53,9 +53,7 @@ pub struct Array<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Track {
-    pub album: Option<Album>,
-    pub composer: Option<Composer>,
+pub struct Track<T: extra::TrackExtra> {
     pub copyright: String,
     pub displayable: bool,
     pub downloadable: bool,
@@ -81,16 +79,19 @@ pub struct Track {
     pub track_number: u64,
     pub version: Option<String>,
     pub work: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: T,
 }
 
-impl Display for Track {
+impl<T: extra::TrackExtra> Display for Track<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.title)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Album {
+pub struct Album<T: extra::AlbumExtra> {
     pub artist: Artist,
     pub displayable: bool,
     pub downloadable: bool,
@@ -110,10 +111,12 @@ pub struct Album {
     pub title: String,
     pub upc: String,
     pub version: Option<String>,
-    pub tracks: Option<Array<Track>>,
+
+    #[serde(flatten)]
+    pub extra: T,
 }
 
-impl Display for Album {
+impl<T: extra::AlbumExtra> Display for Album<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -132,7 +135,7 @@ pub struct Artist {
     pub image: Value,
     pub name: String,
     pub slug: String,
-    pub albums: Option<Array<Album>>,
+    pub albums: Option<Array<Album<()>>>, // TODO: What is the extra here ?
 }
 
 impl Display for Artist {
@@ -188,13 +191,13 @@ pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
     fn name_plural<'b>() -> &'b str;
 }
 
-impl QobuzType for Album {
+impl QobuzType for Album<()> {
     fn name_plural<'b>() -> &'b str {
         "albums"
     }
 }
 
-impl QobuzType for Track {
+impl QobuzType for Track<()> {
     fn name_plural<'b>() -> &'b str {
         "tracks"
     }

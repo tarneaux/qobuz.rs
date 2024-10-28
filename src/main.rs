@@ -8,12 +8,17 @@ async fn main() {
     let client = Client::new(QobuzCredentials::from_env().unwrap())
         .await
         .unwrap();
-    println!(
-        "{}",
-        client.get_user_favorites::<Track>().await.unwrap().items[0]
-    );
+    let last_fav = client
+        .get_user_favorites::<Track<()>>()
+        .await
+        .unwrap()
+        .items[0]
+        .clone();
+    println!("{}", last_fav);
+    println!("{:#?}", client.get_playlist("1848228").await);
+    println!("{:#?}", client.get_album("0075596077460").await);
     let mut bytes_stream = client
-        .stream_track("64868955", Quality::HiRes96)
+        .stream_track(&last_fav.id.to_string(), Quality::HiRes96)
         .await
         .unwrap();
     let mut out = File::create("test.mp3")

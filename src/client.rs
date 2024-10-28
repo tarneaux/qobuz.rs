@@ -94,7 +94,10 @@ impl Client {
     }
 
     /// Get information on a track.
-    pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
+    pub async fn get_track(
+        &self,
+        track_id: &str,
+    ) -> Result<Track<extra::AlbumAndComposer>, ApiError> {
         let params = [("track_id", track_id)];
         let res = self.do_request("track/get", &params).await?;
         Ok(serde_json::from_value(res)?)
@@ -125,7 +128,7 @@ impl Client {
     }
 
     /// Get information on an album.
-    pub async fn get_album(&self, album_id: &str) -> Result<Album, ApiError> {
+    pub async fn get_album(&self, album_id: &str) -> Result<Album<extra::Tracks>, ApiError> {
         self.do_request("album/get", &[("album_id", album_id)])
             .await
             .map_err(|e| e.into())
@@ -350,8 +353,8 @@ mod tests {
             .expect("Couldn't get credentials env variables which need to be set for this test.");
         println!("{:?}", credentials);
         let client = Client::new(credentials).await.unwrap();
-        client.get_user_favorites::<Album>().await.unwrap();
-        client.get_user_favorites::<Track>().await.unwrap();
+        client.get_user_favorites::<Album<()>>().await.unwrap();
+        client.get_user_favorites::<Track<()>>().await.unwrap();
         client.get_user_favorites::<Artist>().await.unwrap();
         client
             .get_track_file_url("64868955", Quality::HiRes96)
