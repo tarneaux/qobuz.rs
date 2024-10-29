@@ -22,6 +22,18 @@ pub struct Client {
 
 impl Client {
     /// Create a new client, logging in with the given credentials.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// use qobuz::{QobuzCredentials, Client};
+    /// let credentials = QobuzCredentials::from_env().unwrap();
+    /// let client = Client::new(credentials).await.unwrap();
+    /// # })
+    /// ```
+
     pub async fn new(credentials: QobuzCredentials) -> Result<Self, LoginError> {
         let token = get_auth_token(&credentials).await?;
         let reqwest_client = make_http_client(&credentials.app_id, Some(&token));
@@ -33,6 +45,21 @@ impl Client {
     }
 
     /// Get the download URL of a track.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get download URL of "Let it Be" (the track)
+    /// let mut artist = client
+    ///     .get_track_file_url("tljb7n7bc8usc")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     pub async fn get_track_file_url(
         &self,
         track_id: &str, // TODO: u64?
@@ -66,7 +93,20 @@ impl Client {
     }
 
     /// Get the user's favorites of type `T`.
-    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Array<T>, ApiError> {
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// use qobuz::Track;
+    /// // Get the user's favorite tracks
+    /// client.get_user_favorites::<Track<()>>().await.unwrap();
+    /// # })
+    /// ```
+    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
         let timestamp_now = chrono::Utc::now().timestamp().to_string();
         let r_sig_hash = format!(
             "{:x}",
@@ -86,14 +126,29 @@ impl Client {
         let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
             .await?;
-        Ok(serde_json::from_value(
+        Ok(serde_json::from_value::<Array<T>>(
             res.get(fav_type)
                 .unwrap_or_else(|| panic!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
                 .clone(),
-        )?)
+        )?.items)
     }
 
     /// Get information on a track.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get information on "Let It Be" (the track)
+    /// let mut artist = client
+    ///     .get_track("129342731")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     pub async fn get_track(
         &self,
         track_id: &str,
@@ -104,21 +159,42 @@ impl Client {
     }
 
     /// Get information on a playlist.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get information on an official Beatles playlist
+    /// let mut artist = client
+    ///     .get_playlist("1141084")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
         let count = self
-            .do_request::<PlaylistWithExtra<extra::TracksCount>>(
+            .do_request::<PlaylistWithExtra<extra::Tracks>>(
                 "playlist/get",
-                &[("playlist_id", playlist_id)],
+                &[
+                    ("playlist_id", playlist_id),
+                    ("extra", "tracks"),
+                    ("limit", "1"),
+                    ("offset", "0"),
+                ],
             )
             .await?
             .extra
-            .tracks_count;
+            .tracks
+            .total;
         // TODO: Global configuration for track count ?
         self.do_request(
             "playlist/get",
             &[
-                ("extra", "tracks"),
                 ("playlist_id", playlist_id),
+                ("extra", "tracks"),
                 ("limit", &count.to_string()),
                 ("offset", "0"),
             ],
@@ -128,6 +204,21 @@ impl Client {
     }
 
     /// Get information on an album.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get information on "Abbey Road"
+    /// let mut artist = client
+    ///     .get_album("trrcz9pvaaz6b")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     pub async fn get_album(&self, album_id: &str) -> Result<Album<extra::Tracks>, ApiError> {
         self.do_request("album/get", &[("album_id", album_id)])
             .await
@@ -135,14 +226,44 @@ impl Client {
     }
 
     /// Get information on an artist.
-    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist, ApiError> {
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get information on the Beatles
+    /// let mut artist = client
+    ///     .get_artist("26390")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist<extra::Albums>, ApiError> {
+        let count = self
+            .do_request::<Artist<extra::Albums>>(
+                "artist/get",
+                &[
+                    ("artist_id", artist_id),
+                    ("extra", "albums"),
+                    ("limit", "1"),
+                    ("offset", "0"),
+                ],
+            )
+            .await?
+            .extra
+            .albums
+            .total;
+        // TODO: Global configuration for track count ?
         self.do_request(
             "artist/get",
             &[
                 ("artist_id", artist_id),
-                ("limit", "500"),
-                ("offset", "0"), // TODO: walk
                 ("extra", "albums"),
+                ("limit", &count.to_string()),
+                ("offset", "0"),
             ],
         )
         .await
@@ -150,6 +271,32 @@ impl Client {
     }
 
     /// Stream a track.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use qobuz::Quality;
+    /// use tokio::fs::File;
+    /// use futures::StreamExt;
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Download the "Let It Be" track to test.mp3
+    /// let mut bytes_stream = client
+    ///     .stream_track("129342731", Quality::HiRes96)
+    ///     .await
+    ///     .unwrap();
+    /// let mut out = File::create("let_it_be.mp3")
+    ///     .await
+    ///     .expect("failed to create file");
+    /// while let Some(item) = bytes_stream.next().await {
+    ///     tokio::io::copy(&mut item.unwrap().as_ref(), &mut out)
+    ///         .await
+    ///         .unwrap();
+    /// }
+    /// # })
+    /// ```
     pub async fn stream_track(
         &self,
         track_id: &str,
@@ -344,30 +491,69 @@ impl QobuzCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::StreamExt;
     use tokio::test;
 
-    #[test]
-    async fn test_client() {
+    pub async fn make_client() -> Client {
         let credentials = QobuzCredentials::from_env()
             .expect("Couldn't get credentials env variables which need to be set for this test.");
         println!("{:?}", credentials);
-        let client = Client::new(credentials).await.unwrap();
+        Client::new(credentials).await.unwrap()
+    }
+
+    #[test]
+    async fn test_get_user_favorites() {
+        let client = make_client().await;
         client.get_user_favorites::<Album<()>>().await.unwrap();
         client.get_user_favorites::<Track<()>>().await.unwrap();
-        client.get_user_favorites::<Artist>().await.unwrap();
-        client
+        client.get_user_favorites::<Artist<()>>().await.unwrap();
+    }
+
+    #[test]
+    async fn test_get_track_file_url() {
+        make_client()
+            .await
             .get_track_file_url("64868955", Quality::HiRes96)
             .await
             .unwrap();
+    }
+
+    #[test]
+    async fn test_get_track() {
+        let client = make_client().await;
         client.get_track("64868955").await.unwrap();
+        client.get_track("no").await.unwrap_err();
+    }
+
+    #[test]
+    async fn test_get_album() {
+        let client = make_client().await;
         client.get_album("trrcz9pvaaz6b").await.unwrap();
+        client.get_album("no").await.unwrap_err();
+    }
+
+    #[test]
+    async fn test_get_artist() {
+        let client = make_client().await;
         client.get_artist("26390").await.unwrap();
-        let mut stream = client
+        client.get_artist("no").await.unwrap_err();
+    }
+
+    #[test]
+    async fn test_get_playlist() {
+        let client = make_client().await;
+        client.get_playlist("1141084").await.unwrap(); // Official Qobuz playlist
+        client.get_playlist("no").await.unwrap_err();
+        // TODO: First  user playlist
+    }
+
+    #[test]
+    async fn test_stream_track() {
+        use futures::StreamExt;
+        let mut stream = make_client()
+            .await
             .stream_track("64868955", Quality::HiRes96)
             .await
             .unwrap();
         assert!(stream.next().await.is_some());
-        client.get_track("no").await.unwrap_err();
     }
 }

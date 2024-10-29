@@ -13,7 +13,6 @@ where
     pub name: String,
     pub slug: String,
     pub owner: Owner,
-
     pub is_public: bool,
 
     #[serde(with = "ser_datetime_i64")]
@@ -22,7 +21,7 @@ where
     pub description: String,
     #[serde(with = "ser_duration_u64")]
     pub duration: Duration,
-    pub genres: Vec<String>,
+    pub genres: Vec<PlaylistGenre>,
     pub id: u64,
     pub images: Vec<Url>,
     pub images150: Vec<Url>,
@@ -92,7 +91,7 @@ impl<T: extra::TrackExtra> Display for Track<T> {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Album<T: extra::AlbumExtra> {
-    pub artist: Artist,
+    pub artist: Artist<()>,
     pub displayable: bool,
     pub downloadable: bool,
     #[serde(with = "ser_duration_u64")]
@@ -129,16 +128,18 @@ impl<T: extra::AlbumExtra> Display for Album<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Artist {
+pub struct Artist<T: extra::ArtistExtra> {
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
     pub name: String,
     pub slug: String,
-    pub albums: Option<Array<Album<()>>>, // TODO: What is the extra here ?
+
+    #[serde(flatten)]
+    pub extra: T,
 }
 
-impl Display for Artist {
+impl<T: extra::ArtistExtra> Display for Artist<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -181,6 +182,20 @@ pub struct Performer {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PlaylistGenre {
+    String(String),
+    Object {
+        id: u32,
+        color: String,
+        name: String,
+        path: Vec<u32>,
+        slug: String,
+        percent: u32,
+    },
+}
+
 impl Display for Performer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
@@ -203,7 +218,7 @@ impl QobuzType for Track<()> {
     }
 }
 
-impl QobuzType for Artist {
+impl QobuzType for Artist<()> {
     fn name_plural<'b>() -> &'b str {
         "artists"
     }
