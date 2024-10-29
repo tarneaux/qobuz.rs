@@ -496,7 +496,6 @@ mod tests {
     pub async fn make_client() -> Client {
         let credentials = QobuzCredentials::from_env()
             .expect("Couldn't get credentials env variables which need to be set for this test.");
-        println!("{:?}", credentials);
         Client::new(credentials).await.unwrap()
     }
 
