@@ -53,9 +53,10 @@ impl Client {
     /// # use qobuz::{QobuzCredentials, Client};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
+    /// use qobuz::Quality;
     /// // Get download URL of "Let it Be" (the track)
     /// let mut artist = client
-    ///     .get_track_file_url("tljb7n7bc8usc")
+    ///     .get_track_file_url("129342731", Quality::HiRes96)
     ///     .await
     ///     .unwrap();
     /// # })
