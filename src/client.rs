@@ -124,6 +124,39 @@ impl Client {
         )?.items)
     }
 
+    /// Get the user's playlists.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// // Get the user's favorite tracks
+    /// client.get_user_playlists().await.unwrap();
+    /// # })
+    /// ```
+    pub async fn get_user_playlists(&self) -> Result<Vec<PlaylistWithExtra<()>>, ApiError> {
+        let params = [
+            ("limit", "500"),
+            ("offset", "0"), // TODO: walk
+        ];
+        let res: Value = self
+            .do_request("playlist/getUserPlaylists", &params)
+            .await?;
+        Ok(serde_json::from_value::<Array<PlaylistWithExtra<()>>>(
+            res.get("playlists")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Couldn't get items field from returned data while getting user favorites"
+                    )
+                })
+                .clone(),
+        )?
+        .items)
+    }
+
     /// Get information on a track.
     ///
     /// # Example
@@ -496,6 +529,12 @@ mod tests {
         client.get_user_favorites::<Album<()>>().await.unwrap();
         client.get_user_favorites::<Track<()>>().await.unwrap();
         client.get_user_favorites::<Artist<()>>().await.unwrap();
+    }
+
+    #[test]
+    async fn test_get_user_playlists() {
+        let client = make_client().await;
+        client.get_user_playlists().await.unwrap();
     }
 
     #[test]
