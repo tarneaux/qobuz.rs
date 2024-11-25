@@ -108,19 +108,9 @@ impl Client {
     /// # })
     /// ```
     pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
-        let timestamp_now = chrono::Utc::now().timestamp().to_string();
-        let r_sig_hash = format!(
-            "{:x}",
-            md5::compute(format!(
-                "favoritegetUserFavorites{timestamp_now}{}",
-                self.secret
-            ))
-        );
         let fav_type = T::name_plural();
         let params = [
             ("type", fav_type),
-            ("request_ts", &timestamp_now),
-            ("request_sig", &r_sig_hash),
             ("limit", "500"),
             ("offset", "0"), // TODO: walk
         ];
