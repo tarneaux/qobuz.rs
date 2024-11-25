@@ -192,7 +192,7 @@ pub enum PlaylistGenre {
         name: String,
         path: Vec<u32>,
         slug: String,
-        percent: u32,
+        percent: f32,
     },
 }
 
