@@ -157,6 +157,40 @@ impl Client {
         .items)
     }
 
+    /// Get information on an item.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client};
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// use qobuz::{Track, extra::AlbumAndComposer};
+    /// // Get information on "Let It Be" (the track)
+    /// let mut artist = client
+    ///     .get_item::<Track<()>>("129342731")
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
+    where
+        T: QobuzType,
+    {
+        Ok(self
+            .do_request(
+                &format!("{}/get", T::name_singular()),
+                &[
+                    (format!("{}_id", T::name_singular()).as_str(), id),
+                    ("extra", T::extra_arg().unwrap_or("")),
+                    ("limit", "500"), // TODO: walk
+                    ("offset", "0"),
+                ],
+            )
+            .await?)
+    }
+
     /// Get information on a track.
     ///
     /// # Example

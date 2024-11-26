@@ -203,22 +203,51 @@ impl Display for Performer {
 }
 
 pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
+    fn extra_arg<'b>() -> Option<&'b str>;
+    fn name_singular<'b>() -> &'b str;
     fn name_plural<'b>() -> &'b str;
 }
 
-impl QobuzType for Album<()> {
+impl<E> QobuzType for Album<E>
+where
+    E: Serialize + for<'a> Deserialize<'a> + extra::AlbumExtra,
+{
+    fn extra_arg<'b>() -> Option<&'b str> {
+        E::extra_arg()
+    }
+    fn name_singular<'b>() -> &'b str {
+        "album"
+    }
     fn name_plural<'b>() -> &'b str {
         "albums"
     }
 }
 
-impl QobuzType for Track<()> {
+impl<E> QobuzType for Track<E>
+where
+    E: Serialize + for<'a> Deserialize<'a> + extra::TrackExtra,
+{
+    fn extra_arg<'b>() -> Option<&'b str> {
+        E::extra_arg()
+    }
+    fn name_singular<'b>() -> &'b str {
+        "track"
+    }
     fn name_plural<'b>() -> &'b str {
         "tracks"
     }
 }
 
-impl QobuzType for Artist<()> {
+impl<E> QobuzType for Artist<E>
+where
+    E: Serialize + for<'a> Deserialize<'a> + extra::ArtistExtra,
+{
+    fn extra_arg<'b>() -> Option<&'b str> {
+        E::extra_arg()
+    }
+    fn name_singular<'b>() -> &'b str {
+        "artist"
+    }
     fn name_plural<'b>() -> &'b str {
         "artists"
     }
