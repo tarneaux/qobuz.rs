@@ -206,6 +206,9 @@ pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
     fn extra_arg<'b>() -> Option<&'b str>;
     fn name_singular<'b>() -> &'b str;
     fn name_plural<'b>() -> &'b str;
+    fn add_extra() -> bool {
+        true
+    }
 }
 
 impl<E> QobuzType for Album<E>
@@ -220,6 +223,9 @@ where
     }
     fn name_plural<'b>() -> &'b str {
         "albums"
+    }
+    fn add_extra() -> bool {
+        false
     }
 }
 
@@ -250,6 +256,21 @@ where
     }
     fn name_plural<'b>() -> &'b str {
         "artists"
+    }
+}
+
+impl<E> QobuzType for PlaylistWithExtra<E>
+where
+    E: Serialize + for<'a> Deserialize<'a> + extra::PlaylistExtra,
+{
+    fn extra_arg<'b>() -> Option<&'b str> {
+        E::extra_arg()
+    }
+    fn name_singular<'b>() -> &'b str {
+        "playlist"
+    }
+    fn name_plural<'b>() -> &'b str {
+        "playlists"
     }
 }
 

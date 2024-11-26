@@ -112,7 +112,8 @@ impl Client {
         let params = [
             ("type", fav_type),
             ("limit", "500"),
-            ("offset", "0"), // TODO: walk
+            ("offset", "0"),                         // TODO: walk
+            ("extra", T::extra_arg().unwrap_or("")), // TODO: Test
         ];
         let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
@@ -183,10 +184,23 @@ impl Client {
                 &format!("{}/get", T::name_singular()),
                 &[
                     (format!("{}_id", T::name_singular()).as_str(), id),
-                    ("extra", T::extra_arg().unwrap_or("")),
+                    (
+                        "extra",
+                        if T::add_extra() {
+                            // TODO: This is ugly, use the trait system to make it
+                            // prettier.
+                            T::extra_arg().unwrap_or("")
+                        } else {
+                            ""
+                        },
+                    ),
                     ("limit", "500"), // TODO: walk
                     ("offset", "0"),
-                ],
+                ]
+                .map(|v| {
+                    println!("{v:#?}");
+                    v
+                }),
             )
             .await?)
     }
@@ -201,7 +215,7 @@ impl Client {
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// // Get information on "Let It Be" (the track)
-    /// let mut artist = client
+    /// let track = client
     ///     .get_track("129342731")
     ///     .await
     ///     .unwrap();
@@ -211,9 +225,7 @@ impl Client {
         &self,
         track_id: &str,
     ) -> Result<Track<extra::AlbumAndComposer>, ApiError> {
-        let params = [("track_id", track_id)];
-        let res = self.do_request("track/get", &params).await?;
-        Ok(serde_json::from_value(res)?)
+        self.get_item(track_id).await
     }
 
     /// Get information on a playlist.
@@ -233,32 +245,7 @@ impl Client {
     /// # })
     /// ```
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
-        let count = self
-            .do_request::<PlaylistWithExtra<extra::Tracks>>(
-                "playlist/get",
-                &[
-                    ("playlist_id", playlist_id),
-                    ("extra", "tracks"),
-                    ("limit", "1"),
-                    ("offset", "0"),
-                ],
-            )
-            .await?
-            .extra
-            .tracks
-            .total;
-        // TODO: Global configuration for track count ?
-        self.do_request(
-            "playlist/get",
-            &[
-                ("playlist_id", playlist_id),
-                ("extra", "tracks"),
-                ("limit", &count.to_string()),
-                ("offset", "0"),
-            ],
-        )
-        .await
-        .map_err(|e| e.into())
+        self.get_item(playlist_id).await
     }
 
     /// Get information on an album.
@@ -278,9 +265,7 @@ impl Client {
     /// # })
     /// ```
     pub async fn get_album(&self, album_id: &str) -> Result<Album<extra::Tracks>, ApiError> {
-        self.do_request("album/get", &[("album_id", album_id)])
-            .await
-            .map_err(|e| e.into())
+        self.get_item(album_id).await
     }
 
     /// Get information on an artist.
@@ -300,32 +285,7 @@ impl Client {
     /// # })
     /// ```
     pub async fn get_artist(&self, artist_id: &str) -> Result<Artist<extra::Albums>, ApiError> {
-        let count = self
-            .do_request::<Artist<extra::Albums>>(
-                "artist/get",
-                &[
-                    ("artist_id", artist_id),
-                    ("extra", "albums"),
-                    ("limit", "1"),
-                    ("offset", "0"),
-                ],
-            )
-            .await?
-            .extra
-            .albums
-            .total;
-        // TODO: Global configuration for track count ?
-        self.do_request(
-            "artist/get",
-            &[
-                ("artist_id", artist_id),
-                ("extra", "albums"),
-                ("limit", &count.to_string()),
-                ("offset", "0"),
-            ],
-        )
-        .await
-        .map_err(|e| e.into())
+        self.get_item(artist_id).await
     }
 
     /// Stream a track.
