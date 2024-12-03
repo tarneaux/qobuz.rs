@@ -21,7 +21,7 @@ impl PlaylistExtra for () {}
 impl AlbumExtra for () {}
 impl ArtistExtra for () {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Tracks {
     pub tracks: Array<Track<()>>,
@@ -36,7 +36,7 @@ impl Extra for Tracks {
 impl PlaylistExtra for Tracks {}
 impl AlbumExtra for Tracks {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AlbumAndComposer {
     pub album: Album<()>,
     pub composer: Composer,
@@ -50,7 +50,7 @@ impl Extra for AlbumAndComposer {
 
 impl TrackExtra for AlbumAndComposer {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Albums {
     pub albums: Array<Album<()>>, // TODO: What is the extra here ?
 }

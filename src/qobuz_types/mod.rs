@@ -37,13 +37,13 @@ where
 
 pub type Playlist = PlaylistWithExtra<extra::Tracks>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Owner {
     pub id: i64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Array<T> {
     pub items: Vec<T>,
     pub limit: i64,
@@ -51,7 +51,7 @@ pub struct Array<T> {
     pub total: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Track<T: extra::TrackExtra> {
     pub copyright: String,
     pub displayable: bool,
@@ -89,7 +89,7 @@ impl<T: extra::TrackExtra> Display for Track<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Album<T: extra::AlbumExtra> {
     pub artist: Artist<()>,
     pub displayable: bool,
@@ -127,7 +127,7 @@ impl<T: extra::AlbumExtra> Display for Album<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Artist<T: extra::ArtistExtra> {
     pub albums_count: u64,
     pub id: i64,
@@ -145,7 +145,7 @@ impl<T: extra::ArtistExtra> Display for Artist<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Genre {
     pub color: String,
     pub id: u64,
@@ -154,14 +154,14 @@ pub struct Genre {
     pub slug: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     pub large: String,
     pub small: String,
     pub thumbnail: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Label {
     pub albums_count: u64,
     pub id: u64,
@@ -170,13 +170,13 @@ pub struct Label {
     pub supplier_id: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Composer {
     pub id: u64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Performer {
     pub id: u64,
     pub name: String,
@@ -203,9 +203,13 @@ impl Display for Performer {
 }
 
 pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
+    #[must_use]
     fn extra_arg<'b>() -> Option<&'b str>;
+    #[must_use]
     fn name_singular<'b>() -> &'b str;
+    #[must_use]
     fn name_plural<'b>() -> &'b str;
+    #[must_use]
     fn add_extra() -> bool {
         true
     }
@@ -289,7 +293,8 @@ mod ser_datetime_i64 {
     where
         D: Deserializer<'de>,
     {
-        Ok(DateTime::from_timestamp(i64::deserialize(deserializer)?, 0).unwrap())
+        Ok(DateTime::from_timestamp(i64::deserialize(deserializer)?, 0)
+            .expect("Couldn't deserialize DateTime from timestamp"))
     }
 }
 

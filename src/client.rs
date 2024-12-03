@@ -33,7 +33,6 @@ impl Client {
     /// let client = Client::new(credentials).await.unwrap();
     /// # })
     /// ```
-
     pub async fn new(credentials: QobuzCredentials) -> Result<Self, LoginError> {
         let token = get_auth_token(&credentials).await?;
         let reqwest_client = make_http_client(&credentials.app_id, Some(&token));
@@ -86,7 +85,7 @@ impl Client {
             ("intent", "stream"),
         ];
         let res: Value = self.do_request("track/getFileUrl", &params).await?;
-        if let Some(Value::Bool(true)) = res.get("sample") {
+        if res.get("sample") == Some(&Value::Bool(true)) {
             return Err(ApiError::IsSample);
         }
         let res: DownloadUrl = serde_json::from_value(res)?;
@@ -120,9 +119,10 @@ impl Client {
             .await?;
         Ok(serde_json::from_value::<Array<T>>(
             res.get(fav_type)
-                .unwrap_or_else(|| panic!("Couldn't get '{fav_type}' field from returned data while getting user favorites"))
+                .ok_or(ApiError::MissingKey(fav_type.to_string()))?
                 .clone(),
-        )?.items)
+        )?
+        .items)
     }
 
     /// Get the user's playlists.
@@ -148,11 +148,7 @@ impl Client {
             .await?;
         Ok(serde_json::from_value::<Array<PlaylistWithExtra<()>>>(
             res.get("playlists")
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Couldn't get items field from returned data while getting user favorites"
-                    )
-                })
+                .ok_or(ApiError::MissingKey("playlists".to_string()))?
                 .clone(),
         )?
         .items)
@@ -392,11 +388,11 @@ pub enum LoginError {
 impl Display for LoginError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            LoginError::InvalidCredentials => write!(f, "Invalid credentials"),
-            LoginError::InvalidAppId => write!(f, "Invalid app id"),
-            LoginError::ReqwestError(e) => write!(f, "Reqwest error: {}", e),
-            LoginError::NoUserAuthToken => write!(f, "No user auth token"),
-            LoginError::FreeAccount => write!(
+            Self::InvalidCredentials => write!(f, "Invalid credentials"),
+            Self::InvalidAppId => write!(f, "Invalid app id"),
+            Self::ReqwestError(e) => write!(f, "Reqwest error: {e}"),
+            Self::NoUserAuthToken => write!(f, "No user auth token"),
+            Self::FreeAccount => write!(
                 f,
                 "Tried to authenticate into a free account, which can't download tracks."
             ),
@@ -408,6 +404,7 @@ impl Error for LoginError {}
 #[derive(Debug)]
 pub enum ApiError {
     IsSample,
+    MissingKey(String),
     SerdeJson(serde_json::Error),
     Reqwest(reqwest::Error),
 }
@@ -415,6 +412,7 @@ impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::IsSample => write!(f, "Downloadable file is a sample"),
+            Self::MissingKey(s) => write!(f, "Couldn't get key '{s}'"),
             Self::SerdeJson(e) => write!(f, "Serde error: {e}"),
             Self::Reqwest(e) => write!(f, "Reqwest error: {e}"),
         }
@@ -444,16 +442,21 @@ fn make_http_client(app_id: &str, uat: Option<&str>) -> reqwest::Client {
     headers.insert("X-App-Id", app_id.parse().expect("Failed to parse app id"));
     headers.insert(
         reqwest::header::CONTENT_TYPE,
-        "application/json;charset=UTF-8".parse().unwrap(),
+        "application/json;charset=UTF-8"
+            .parse()
+            .expect("Coudln't parse static content type"),
     );
     if let Some(token) = uat {
-        headers.insert("X-User-Auth-Token", token.parse().unwrap());
+        headers.insert(
+            "X-User-Auth-Token",
+            token.parse().expect("Coudln't parse auth token"),
+        );
     }
     reqwest::ClientBuilder::new()
         .user_agent(API_USER_AGENT)
         .default_headers(headers)
         .build()
-        .unwrap()
+        .expect("Couldn't build reqwest::Client")
 }
 
 pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError> {
@@ -470,10 +473,11 @@ pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError>
     {
         Err(ApiError::IsSample) => Ok(true),
         Err(ApiError::Reqwest(e)) => {
-            e.status().unwrap_or_else(|| {
-                panic!("Error while getting correct secret: returned error is unexpected {e}")
-            });
-            Ok(false)
+            if e.is_status() {
+                Ok(false)
+            } else {
+                Err(ApiError::Reqwest(e))
+            }
         }
         Err(e) => Err(e),
         // Since the X-User-Auth-Token header isn't set, we can't get a non-sample URL.
@@ -514,69 +518,113 @@ mod tests {
     pub async fn make_client() -> Client {
         let credentials = QobuzCredentials::from_env()
             .expect("Couldn't get credentials env variables which need to be set for this test.");
-        Client::new(credentials).await.unwrap()
+        Client::new(credentials)
+            .await
+            .expect("Couldn't create client with environment secrets")
     }
 
     #[test]
     async fn test_get_user_favorites() {
         let client = make_client().await;
-        client.get_user_favorites::<Album<()>>().await.unwrap();
-        client.get_user_favorites::<Track<()>>().await.unwrap();
-        client.get_user_favorites::<Artist<()>>().await.unwrap();
+        client
+            .get_user_favorites::<Album<()>>()
+            .await
+            .expect("Couldn't get user favorites of type Album");
+        client
+            .get_user_favorites::<Track<()>>()
+            .await
+            .expect("Couldn't get user favorites of type Track");
+        client
+            .get_user_favorites::<Artist<()>>()
+            .await
+            .expect("Couldn't get user favorites of type Artist");
     }
 
     #[test]
     async fn test_get_user_playlists() {
         let client = make_client().await;
-        client.get_user_playlists().await.unwrap();
+        client
+            .get_user_playlists()
+            .await
+            .expect("Couldn't get user playlists");
     }
 
     #[test]
     async fn test_get_track_file_url() {
+        let track_id = "64868955";
         make_client()
             .await
-            .get_track_file_url("64868955", Quality::HiRes96)
+            .get_track_file_url(track_id, Quality::HiRes96)
             .await
-            .unwrap();
+            .unwrap_or_else(|_| panic!("Couldn't get track file url for track {track_id}"));
     }
 
     #[test]
     async fn test_get_track() {
         let client = make_client().await;
-        client.get_track("64868955").await.unwrap();
-        client.get_track("no").await.unwrap_err();
+        let track_id = "64868955";
+        client
+            .get_track(track_id)
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't get track file url for track {track_id}"));
+        client
+            .get_track("no")
+            .await
+            .expect_err("There should be no track with id 'no'");
     }
 
     #[test]
     async fn test_get_album() {
         let client = make_client().await;
-        client.get_album("trrcz9pvaaz6b").await.unwrap();
-        client.get_album("no").await.unwrap_err();
+        let album_id = "trrcz9pvaaz6b";
+        client
+            .get_album(album_id)
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't get album {album_id}"));
+        client
+            .get_album("no")
+            .await
+            .expect_err("There should be no album with id 'no'");
     }
 
     #[test]
     async fn test_get_artist() {
         let client = make_client().await;
-        client.get_artist("26390").await.unwrap();
-        client.get_artist("no").await.unwrap_err();
+        let artist_id = "26390";
+        client
+            .get_artist(artist_id)
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't get artist {artist_id}"));
+        client
+            .get_artist("no")
+            .await
+            .expect_err("There should be no artist with id 'no'");
     }
 
     #[test]
     async fn test_get_playlist() {
         let client = make_client().await;
-        client.get_playlist("1141084").await.unwrap(); // Official Qobuz playlist
-        client.get_playlist("no").await.unwrap_err();
+        let playlist_id = "1141084"; // Official Qobuz playlist
+        client
+            .get_playlist(playlist_id)
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't  get playlist {playlist_id}"));
+        client
+            .get_playlist("no")
+            .await
+            .expect_err("There should be no playlist with id 'no'");
         // TODO: First  user playlist
     }
 
     #[test]
     async fn test_stream_track() {
         use futures::StreamExt;
+        let track_id = "64868955";
         let mut stream = make_client()
             .await
-            .stream_track("64868955", Quality::HiRes96)
+            .stream_track(track_id, Quality::HiRes96)
             .await
-            .unwrap();
+            .unwrap_or_else(|_| panic!("Coudln't stream track with ID {track_id}"));
         assert!(stream.next().await.is_some());
     }
 }
