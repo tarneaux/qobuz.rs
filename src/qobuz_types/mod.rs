@@ -4,11 +4,12 @@ use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
 pub mod extra;
+use extra::Extra;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PlaylistWithExtra<T>
+pub struct Playlist<T>
 where
-    T: extra::PlaylistExtra,
+    Playlist<T>: Extra,
 {
     pub name: String,
     pub slug: String,
@@ -35,8 +36,6 @@ where
     pub extra: T,
 }
 
-pub type Playlist = PlaylistWithExtra<extra::Tracks>;
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Owner {
     pub id: i64,
@@ -52,7 +51,10 @@ pub struct Array<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Track<T: extra::TrackExtra> {
+pub struct Track<T>
+where
+    Track<T>: Extra,
+{
     pub copyright: String,
     pub displayable: bool,
     pub downloadable: bool,
@@ -83,14 +85,20 @@ pub struct Track<T: extra::TrackExtra> {
     pub extra: T,
 }
 
-impl<T: extra::TrackExtra> Display for Track<T> {
+impl<T> Display for Track<T>
+where
+    Self: Extra,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.title)
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Album<T: extra::AlbumExtra> {
+pub struct Album<T>
+where
+    Self: Extra,
+{
     pub artist: Artist<()>,
     pub displayable: bool,
     pub downloadable: bool,
@@ -115,7 +123,10 @@ pub struct Album<T: extra::AlbumExtra> {
     pub extra: T,
 }
 
-impl<T: extra::AlbumExtra> Display for Album<T> {
+impl<T> Display for Album<T>
+where
+    Self: Extra,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -128,7 +139,10 @@ impl<T: extra::AlbumExtra> Display for Album<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Artist<T: extra::ArtistExtra> {
+pub struct Artist<T>
+where
+    Self: Extra,
+{
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
@@ -139,7 +153,10 @@ pub struct Artist<T: extra::ArtistExtra> {
     pub extra: T,
 }
 
-impl<T: extra::ArtistExtra> Display for Artist<T> {
+impl<T> Display for Artist<T>
+where
+    Self: Extra,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -202,44 +219,31 @@ impl Display for Performer {
     }
 }
 
-pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
-    #[must_use]
-    fn extra_arg<'b>() -> Option<&'b str>;
+pub trait QobuzType: Serialize + for<'a> Deserialize<'a> + extra::Extra {
     #[must_use]
     fn name_singular<'b>() -> &'b str;
     #[must_use]
     fn name_plural<'b>() -> &'b str;
-    #[must_use]
-    fn add_extra() -> bool {
-        true
-    }
 }
 
-impl<E> QobuzType for Album<E>
+impl<T> QobuzType for Album<T>
 where
-    E: Serialize + for<'a> Deserialize<'a> + extra::AlbumExtra,
+    Self: Extra,
+    T: Serialize + for<'a> Deserialize<'a>,
 {
-    fn extra_arg<'b>() -> Option<&'b str> {
-        E::extra_arg()
-    }
     fn name_singular<'b>() -> &'b str {
         "album"
     }
     fn name_plural<'b>() -> &'b str {
         "albums"
     }
-    fn add_extra() -> bool {
-        false
-    }
 }
 
-impl<E> QobuzType for Track<E>
+impl<T> QobuzType for Track<T>
 where
-    E: Serialize + for<'a> Deserialize<'a> + extra::TrackExtra,
+    Self: Extra,
+    T: Serialize + for<'a> Deserialize<'a>,
 {
-    fn extra_arg<'b>() -> Option<&'b str> {
-        E::extra_arg()
-    }
     fn name_singular<'b>() -> &'b str {
         "track"
     }
@@ -248,13 +252,11 @@ where
     }
 }
 
-impl<E> QobuzType for Artist<E>
+impl<T> QobuzType for Artist<T>
 where
-    E: Serialize + for<'a> Deserialize<'a> + extra::ArtistExtra,
+    Self: Extra,
+    T: Serialize + for<'a> Deserialize<'a>,
 {
-    fn extra_arg<'b>() -> Option<&'b str> {
-        E::extra_arg()
-    }
     fn name_singular<'b>() -> &'b str {
         "artist"
     }
@@ -263,13 +265,11 @@ where
     }
 }
 
-impl<E> QobuzType for PlaylistWithExtra<E>
+impl<T> QobuzType for Playlist<T>
 where
-    E: Serialize + for<'a> Deserialize<'a> + extra::PlaylistExtra,
+    Self: Extra,
+    T: Serialize + for<'a> Deserialize<'a>,
 {
-    fn extra_arg<'b>() -> Option<&'b str> {
-        E::extra_arg()
-    }
     fn name_singular<'b>() -> &'b str {
         "playlist"
     }

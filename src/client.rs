@@ -6,9 +6,7 @@ use std::env::VarError;
 use std::error::Error;
 use std::{env, fmt, fmt::Display, fmt::Formatter};
 
-use crate::{
-    extra, quality::Quality, Album, Array, Artist, Playlist, PlaylistWithExtra, QobuzType, Track,
-};
+use crate::{extra, quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
@@ -138,7 +136,7 @@ impl Client {
     /// client.get_user_playlists().await.unwrap();
     /// # })
     /// ```
-    pub async fn get_user_playlists(&self) -> Result<Vec<PlaylistWithExtra<()>>, ApiError> {
+    pub async fn get_user_playlists(&self) -> Result<Vec<Playlist<()>>, ApiError> {
         let params = [
             ("limit", "500"),
             ("offset", "0"), // TODO: walk
@@ -146,7 +144,7 @@ impl Client {
         let res: Value = self
             .do_request("playlist/getUserPlaylists", &params)
             .await?;
-        Ok(serde_json::from_value::<Array<PlaylistWithExtra<()>>>(
+        Ok(serde_json::from_value::<Array<Playlist<()>>>(
             res.get("playlists")
                 .ok_or(ApiError::MissingKey("playlists".to_string()))?
                 .clone(),
@@ -180,16 +178,7 @@ impl Client {
                 &format!("{}/get", T::name_singular()),
                 &[
                     (format!("{}_id", T::name_singular()).as_str(), id),
-                    (
-                        "extra",
-                        if T::add_extra() {
-                            // TODO: This is ugly, use the trait system to make it
-                            // prettier.
-                            T::extra_arg().unwrap_or("")
-                        } else {
-                            ""
-                        },
-                    ),
+                    ("extra", T::extra_arg().unwrap_or("")),
                     ("limit", "500"), // TODO: walk
                     ("offset", "0"),
                 ]
@@ -240,7 +229,10 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist, ApiError> {
+    pub async fn get_playlist(
+        &self,
+        playlist_id: &str,
+    ) -> Result<Playlist<extra::Tracks>, ApiError> {
         self.get_item(playlist_id).await
     }
 
