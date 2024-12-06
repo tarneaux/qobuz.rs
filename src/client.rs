@@ -115,12 +115,12 @@ impl Client {
         let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
             .await?;
-        Ok(serde_json::from_value::<Array<T>>(
-            res.get(fav_type)
-                .ok_or(ApiError::MissingKey(fav_type.to_string()))?
-                .clone(),
-        )?
-        .items)
+        let array: Value = res
+            .get(fav_type)
+            .ok_or(ApiError::MissingKey(fav_type.to_string()))?
+            .clone();
+        let array: Array<T> = serde_json::from_value(array)?;
+        Ok(array.items)
     }
 
     /// Get the user's playlists.
@@ -144,12 +144,12 @@ impl Client {
         let res: Value = self
             .do_request("playlist/getUserPlaylists", &params)
             .await?;
-        Ok(serde_json::from_value::<Array<Playlist<()>>>(
-            res.get("playlists")
-                .ok_or(ApiError::MissingKey("playlists".to_string()))?
-                .clone(),
-        )?
-        .items)
+        let array: Value = res
+            .get("playlists")
+            .ok_or(ApiError::MissingKey("playlists".to_string()))?
+            .clone();
+        let array: Array<Playlist<()>> = serde_json::from_value(array)?;
+        Ok(array.items)
     }
 
     /// Get information on an item.
