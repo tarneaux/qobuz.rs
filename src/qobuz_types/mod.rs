@@ -67,8 +67,8 @@ where
     // May be needed later. seems to represent CD number.
     // pub media_number: i64,
     pub parental_warning: bool,
-    pub performer: Performer,
-    pub performers: String,
+    pub performer: Option<Performer>,
+    pub performers: Option<String>,
     pub playlist_track_id: Option<i64>,
     pub position: Option<i64>,
     pub previewable: bool,
