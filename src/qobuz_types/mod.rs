@@ -90,7 +90,18 @@ where
     Self: Extra,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.title)
+        let (true, year) = self.release_date_original.year_ce() else {
+            panic!("Release year shouldn't be BCE");
+        };
+        write!(
+            f,
+            "{} - {} ({})",
+            self.performer
+                .clone()
+                .map_or("Various Artists".to_string(), |p| p.to_string()),
+            self.title,
+            year
+        )
     }
 }
 
