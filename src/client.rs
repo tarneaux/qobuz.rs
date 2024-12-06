@@ -181,11 +181,7 @@ impl Client {
                     ("extra", T::extra_arg().unwrap_or("")),
                     ("limit", "500"), // TODO: walk
                     ("offset", "0"),
-                ]
-                .map(|v| {
-                    println!("{v:#?}");
-                    v
-                }),
+                ],
             )
             .await?)
     }
