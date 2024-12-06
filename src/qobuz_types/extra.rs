@@ -1,7 +1,7 @@
 use crate::{Album, Array, Artist, Composer, Playlist, Track};
 use serde::{Deserialize, Serialize};
 
-pub trait Extra {
+pub trait Extra: Serialize + for<'a> Deserialize<'a> {
     fn extra_arg<'b>() -> Option<&'b str>;
 }
 

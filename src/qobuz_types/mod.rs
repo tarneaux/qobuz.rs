@@ -229,7 +229,6 @@ pub trait QobuzType: Serialize + for<'a> Deserialize<'a> + extra::Extra {
 impl<T> QobuzType for Album<T>
 where
     Self: Extra,
-    T: Serialize + for<'a> Deserialize<'a>,
 {
     fn name_singular<'b>() -> &'b str {
         "album"
@@ -242,7 +241,6 @@ where
 impl<T> QobuzType for Track<T>
 where
     Self: Extra,
-    T: Serialize + for<'a> Deserialize<'a>,
 {
     fn name_singular<'b>() -> &'b str {
         "track"
@@ -255,7 +253,6 @@ where
 impl<T> QobuzType for Artist<T>
 where
     Self: Extra,
-    T: Serialize + for<'a> Deserialize<'a>,
 {
     fn name_singular<'b>() -> &'b str {
         "artist"
@@ -268,7 +265,6 @@ where
 impl<T> QobuzType for Playlist<T>
 where
     Self: Extra,
-    T: Serialize + for<'a> Deserialize<'a>,
 {
     fn name_singular<'b>() -> &'b str {
         "playlist"
