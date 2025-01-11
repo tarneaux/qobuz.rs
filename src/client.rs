@@ -267,7 +267,10 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist<extra::Albums>, ApiError> {
+    pub async fn get_artist(
+        &self,
+        artist_id: &str,
+    ) -> Result<Artist<extra::AlbumsAndTracks>, ApiError> {
         self.get_item(artist_id).await
     }
 

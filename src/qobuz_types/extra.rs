@@ -58,10 +58,10 @@ impl Extra for Track<AlbumAndComposer> {
     }
 }
 
-impl Extra for Artist<Albums> {
-    type Extra = Albums;
+impl Extra for Artist<AlbumsAndTracks> {
+    type Extra = AlbumsAndTracks;
     fn extra_arg<'b>() -> Option<&'b str> {
-        Some("albums")
+        Some("albums,tracks")
     }
 }
 
@@ -78,6 +78,7 @@ pub struct AlbumAndComposer {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct Albums {
+pub struct AlbumsAndTracks {
     pub albums: Array<Album<()>>, // TODO: What is the extra here ?
+    pub tracks: Array<Track<()>>,
 }
