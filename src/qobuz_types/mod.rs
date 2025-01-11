@@ -9,7 +9,7 @@ use extra::Extra;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlist<T>
 where
-    Playlist<T>: Extra,
+    Self: Extra,
 {
     pub name: String,
     pub slug: String,
@@ -53,7 +53,7 @@ pub struct Array<T> {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Track<T>
 where
-    Track<T>: Extra,
+    Self: Extra,
 {
     pub copyright: String,
     pub displayable: bool,
@@ -230,7 +230,7 @@ impl Display for Performer {
     }
 }
 
-pub trait QobuzType: Serialize + for<'a> Deserialize<'a> + extra::Extra {
+pub trait QobuzType: Serialize + for<'a> Deserialize<'a> + Extra {
     #[must_use]
     fn name_singular<'b>() -> &'b str;
     #[must_use]
