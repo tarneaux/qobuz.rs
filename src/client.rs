@@ -104,13 +104,12 @@ impl Client {
     /// client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
-    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
+    pub async fn get_user_favorites<T: QobuzType<Extra = ()>>(&self) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
         let params = [
             ("type", fav_type),
             ("limit", "500"),
-            ("offset", "0"),                         // TODO: walk
-            ("extra", T::extra_arg().unwrap_or("")), // TODO: Test
+            ("offset", "0"), // TODO: walk
         ];
         let res: Value = self
             .do_request("favorite/getUserFavorites", &params)
