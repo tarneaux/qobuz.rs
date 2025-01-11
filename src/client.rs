@@ -162,7 +162,7 @@ impl Client {
     /// # let client = Client::new(credentials).await.unwrap();
     /// use qobuz::{Track, extra::AlbumAndComposer};
     /// // Get information on "Let It Be" (the track)
-    /// let mut artist = client
+    /// let track = client
     ///     .get_item::<Track<()>>("129342731")
     ///     .await
     ///     .unwrap();
@@ -218,7 +218,7 @@ impl Client {
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// // Get information on an official Beatles playlist
-    /// let mut artist = client
+    /// let playlist = client
     ///     .get_playlist("1141084")
     ///     .await
     ///     .unwrap();
@@ -241,7 +241,7 @@ impl Client {
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// // Get information on "Abbey Road"
-    /// let mut artist = client
+    /// let album = client
     ///     .get_album("trrcz9pvaaz6b")
     ///     .await
     ///     .unwrap();
@@ -261,7 +261,7 @@ impl Client {
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// // Get information on the Beatles
-    /// let mut artist = client
+    /// let artist = client
     ///     .get_artist("26390")
     ///     .await
     ///     .unwrap();
