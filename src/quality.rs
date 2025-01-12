@@ -55,3 +55,27 @@ impl From<Quality> for u8 {
         }
     }
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum FileType {
+    Mp3,
+    Flac,
+}
+
+impl Display for FileType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Mp3 => write!(f, "mp3"),
+            Self::Flac => write!(f, "flac"),
+        }
+    }
+}
+
+impl From<&Quality> for FileType {
+    fn from(value: &Quality) -> Self {
+        match value {
+            Quality::Mp3 => Self::Mp3,
+            Quality::Cd | Quality::HiRes96 | Quality::HiRes192 => Self::Flac,
+        }
+    }
+}
