@@ -4,11 +4,30 @@ use chrono::{Datelike, NaiveDate};
 use id3::frame::Timestamp;
 use std::{error::Error, fmt::Display};
 
+pub async fn tag_tracks<E1, E2>(
+    tracks_and_paths: Vec<(&Track<E1>, &str)>,
+    album: &Album<E2>,
+) -> Result<(), MultiTagError>
+where
+    Track<E1>: Extra + Sync,
+    Album<E2>: Extra + Sync,
+{
+    let cover_raw = reqwest::get(album.image.large.clone())
+        .await?
+        .bytes()
+        .await?;
+    let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
+    for (track, path) in tracks_and_paths {
+        tag_track(track, path, album, cover.clone())?;
+    }
+    Ok(())
+}
+
 pub fn tag_track<E1, E2>(
     track: &Track<E1>,
     path: &str,
     album: &Album<E2>,
-    album_cover: Option<audiotags::Picture>,
+    album_cover: audiotags::Picture,
 ) -> Result<(), TaggingError>
 where
     Track<E1>: Extra,
@@ -21,7 +40,7 @@ where
     tag.set_album(TagAlbum {
         title: &album.title,
         artist: Some(&album.artist.name),
-        cover: album_cover,
+        cover: Some(album_cover),
     });
     tag.set_disc((
         track.media_number.try_into()?,
@@ -44,6 +63,35 @@ fn datetime_to_timestamp(dt: NaiveDate) -> Result<Timestamp, std::num::TryFromIn
         second: None,
     })
 }
+
+#[derive(Debug)]
+pub enum MultiTagError {
+    TaggingError(TaggingError),
+    ReqwestError(reqwest::Error),
+}
+
+impl Display for MultiTagError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TaggingError(e) => write!(f, "Tagging error: {e}"),
+            Self::ReqwestError(e) => write!(f, "Reqwest error: {e}"),
+        }
+    }
+}
+
+impl From<TaggingError> for MultiTagError {
+    fn from(value: TaggingError) -> Self {
+        Self::TaggingError(value)
+    }
+}
+
+impl From<reqwest::Error> for MultiTagError {
+    fn from(value: reqwest::Error) -> Self {
+        Self::ReqwestError(value)
+    }
+}
+
+impl Error for MultiTagError {}
 
 #[derive(Debug)]
 pub enum TaggingError {
