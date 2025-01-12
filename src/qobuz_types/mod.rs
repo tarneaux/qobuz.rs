@@ -64,8 +64,7 @@ where
     pub hires_streamable: bool,
     pub id: u64,
     pub isrc: String,
-    // May be needed later. seems to represent CD number.
-    // pub media_number: i64,
+    pub media_number: i64,
     pub parental_warning: bool,
     pub performer: Option<Performer>,
     pub performers: Option<String>,
@@ -120,8 +119,7 @@ where
     pub hires_streamable: bool,
     pub image: Image,
     pub label: Label,
-    // May be needed later. seems to represent number of CD's.
-    // pub media_count: i64,
+    pub media_count: i64,
     pub id: String,
     pub release_date_original: NaiveDate,
     pub sampleable: bool,
