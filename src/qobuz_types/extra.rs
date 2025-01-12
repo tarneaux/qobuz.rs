@@ -74,7 +74,7 @@ pub struct Tracks {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AlbumAndComposer {
     pub album: Album<()>,
-    pub composer: Composer,
+    pub composer: Option<Composer>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
