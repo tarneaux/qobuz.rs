@@ -244,6 +244,12 @@ mod tests {
     use tokio::test;
 
     const HIRES192_TRACK: &str = "18893849"; // Creedence Clearwater Revival - Lodi
+    const QUALITIES: [Quality; 4] = [
+        Quality::Mp3,
+        Quality::Cd,
+        Quality::HiRes96,
+        Quality::HiRes192,
+    ];
 
     #[test]
     async fn test_download_and_tag_track() {
@@ -252,12 +258,7 @@ mod tests {
             .get_track(HIRES192_TRACK)
             .await
             .unwrap_or_else(|_| panic!("Couldn't get track {HIRES192_TRACK}"));
-        for quality in [
-            Quality::Mp3,
-            Quality::Cd,
-            Quality::HiRes96,
-            Quality::HiRes192,
-        ] {
+        for quality in QUALITIES {
             downloader
                 .download_and_tag_track(&track, &track.extra.album, quality.clone(), true)
                 .await
