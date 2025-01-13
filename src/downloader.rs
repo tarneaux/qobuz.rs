@@ -266,4 +266,17 @@ mod tests {
                 });
         }
     }
+
+    #[test]
+    async fn test_download_and_tag_album() {
+        let (client, downloader) = make_client_and_downloader().await;
+        let album = client
+            .get_album("lz75qrx8pnjac")
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't get album"));
+        downloader
+            .download_and_tag_album(&album, Quality::Mp3, true)
+            .await
+            .expect("Couldn't download hires192 track in Mp3 quality");
+    }
 }
