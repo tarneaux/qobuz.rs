@@ -19,7 +19,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// Create a new client, logging in with the given credentials.
+    /// Create a new `Client`, logging in with the given credentials.
     ///
     /// # Example
     ///
@@ -52,7 +52,7 @@ impl Client {
     /// # let client = Client::new(credentials).await.unwrap();
     /// use qobuz::Quality;
     /// // Get download URL of "Let it Be" (the track)
-    /// let mut artist = client
+    /// let track = client
     ///     .get_track_file_url("129342731", Quality::HiRes96)
     ///     .await
     ///     .unwrap();
@@ -101,7 +101,7 @@ impl Client {
     /// # let client = Client::new(credentials).await.unwrap();
     /// use qobuz::Track;
     /// // Get the user's favorite tracks
-    /// client.get_user_favorites::<Track<()>>().await.unwrap();
+    /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
     pub async fn get_user_favorites<T: QobuzType<Extra = ()>>(&self) -> Result<Vec<T>, ApiError> {
@@ -131,8 +131,8 @@ impl Client {
     /// # use qobuz::{QobuzCredentials, Client};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// // Get the user's favorite tracks
-    /// client.get_user_playlists().await.unwrap();
+    /// // Get the user's playlists
+    /// let playlists = client.get_user_playlists().await.unwrap();
     /// # })
     /// ```
     pub async fn get_user_playlists(&self) -> Result<Vec<Playlist<()>>, ApiError> {
@@ -522,7 +522,7 @@ mod tests {
         client
             .get_track(track_id)
             .await
-            .unwrap_or_else(|_| panic!("Couldn't get track file url for track {track_id}"));
+            .unwrap_or_else(|_| panic!("Couldn't get track {track_id}"));
         client
             .get_track("no")
             .await
