@@ -1,4 +1,4 @@
-use crate::{Album, Array, Artist, Composer, Playlist, Track};
+use crate::types::{Album, Array, Artist, Composer, Playlist, Track};
 use serde::{Deserialize, Serialize};
 
 pub trait Extra: Serialize + for<'a> Deserialize<'a> {

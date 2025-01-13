@@ -6,7 +6,10 @@ use std::env;
 use std::env::VarError;
 use thiserror::Error;
 
-use crate::{extra, quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
+use crate::{
+    quality::Quality,
+    types::{extra, Album, Array, Artist, Playlist, QobuzType, Track},
+};
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =

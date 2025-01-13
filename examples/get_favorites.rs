@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use qobuz::{Client, QobuzCredentials, Track};
+use qobuz::{types::Track, Client, QobuzCredentials};
 
 #[tokio::main]
 async fn main() {

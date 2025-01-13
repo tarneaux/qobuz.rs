@@ -1,11 +1,14 @@
 use crate::{
-    extra::{self, Extra},
-    tag_track, Album, ApiError, FileType, Quality, TaggingError, Track,
+    quality::{FileExtension, Quality},
+    types::{extra, Album, Track},
+    ApiError,
 };
 use futures::{stream, StreamExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::fs::OpenOptions;
+pub mod tagging;
+use tagging::{tag_track, TaggingError};
 
 #[derive(Debug, Clone)]
 pub struct Downloader {
@@ -71,8 +74,8 @@ impl Downloader {
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        Track<E1>: Extra,
-        Album<E2>: Extra,
+        Track<E1>: extra::Extra,
+        Album<E2>: extra::Extra,
         E1: Sync,
         E2: Sync,
     {
@@ -151,7 +154,7 @@ impl Downloader {
         force: bool,
     ) -> Result<PathBuf, DownloadError>
     where
-        Track<E>: Extra,
+        Track<E>: extra::Extra,
         E: Sync,
     {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
@@ -188,7 +191,7 @@ impl Downloader {
         ensure_exists: bool,
     ) -> Result<PathBuf, std::io::Error>
     where
-        Album<E>: Extra,
+        Album<E>: extra::Extra,
     {
         let mut path = self.root.to_path_buf();
         path.push(format!(
@@ -210,11 +213,11 @@ impl Downloader {
         quality: &Quality,
     ) -> PathBuf
     where
-        Track<E>: Extra,
+        Track<E>: extra::Extra,
     {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));
-        path.set_extension(FileType::from(quality).to_string());
+        path.set_extension(FileExtension::from(quality).to_string());
         path
     }
 }

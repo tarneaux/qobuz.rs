@@ -1,4 +1,4 @@
-use crate::{extra::Extra, Album, Track};
+use crate::types::{extra::Extra, Album, Track};
 use chrono::{Datelike, NaiveDate};
 use id3::frame::Timestamp;
 use std::path::Path;

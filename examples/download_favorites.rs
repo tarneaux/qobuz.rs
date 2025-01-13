@@ -9,8 +9,8 @@ use tokio::sync::RwLock;
 
 use futures::stream;
 use futures::StreamExt;
+use qobuz::{quality::Quality, types::Track};
 use qobuz::{Client, QobuzCredentials};
-use qobuz::{Quality, Track};
 use std::io::Write;
 
 #[tokio::main]
