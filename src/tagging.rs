@@ -1,7 +1,8 @@
 use crate::{extra::Extra, Album, Track};
 use chrono::{Datelike, NaiveDate};
 use id3::frame::Timestamp;
-use std::{error::Error, fmt::Display, path::Path};
+use std::path::Path;
+use thiserror::Error;
 
 pub fn tag_track<E1, E2>(
     track: &Track<E1>,
@@ -45,39 +46,12 @@ fn datetime_to_timestamp(dt: NaiveDate) -> Result<Timestamp, std::num::TryFromIn
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TaggingError {
-    TryFromIntError(std::num::TryFromIntError),
-    AudioTags(audiotags::Error),
-    IoError(std::io::Error),
-}
-
-impl Display for TaggingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TryFromIntError(e) => write!(f, "Couldn't cast int type: {e}"),
-            Self::AudioTags(e) => write!(f, "audiotags error: {e}"),
-            Self::IoError(e) => write!(f, "io error: {e}"),
-        }
-    }
-}
-
-impl Error for TaggingError {}
-
-impl From<audiotags::Error> for TaggingError {
-    fn from(value: audiotags::Error) -> Self {
-        Self::AudioTags(value)
-    }
-}
-
-impl From<std::num::TryFromIntError> for TaggingError {
-    fn from(value: std::num::TryFromIntError) -> Self {
-        Self::TryFromIntError(value)
-    }
-}
-
-impl From<std::io::Error> for TaggingError {
-    fn from(value: std::io::Error) -> Self {
-        Self::IoError(value)
-    }
+    #[error("couldn't cast int type `{0}`")]
+    TryFromIntError(#[from] std::num::TryFromIntError),
+    #[error("audiotags error `{0}`")]
+    AudioTags(#[from] audiotags::Error),
+    #[error("IO error `{0}`")]
+    IoError(#[from] std::io::Error),
 }

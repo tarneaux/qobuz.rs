@@ -1,6 +1,6 @@
 use core::fmt::{self, Display, Formatter};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(try_from = "u8")]
@@ -36,14 +36,9 @@ impl TryFrom<u8> for Quality {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("Invalid quality `{0}`")]
 pub struct InvalidQualityError(u8);
-impl Display for InvalidQualityError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid quality: {}", self.0)
-    }
-}
-impl Error for InvalidQualityError {}
 
 impl From<Quality> for u8 {
     fn from(val: Quality) -> Self {

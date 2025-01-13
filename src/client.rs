@@ -2,9 +2,9 @@ use bytes::Bytes;
 use futures::Stream;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::env::VarError;
-use std::error::Error;
-use std::{env, fmt, fmt::Display, fmt::Formatter};
+use thiserror::Error;
 
 use crate::{extra, quality::Quality, Album, Array, Artist, Playlist, QobuzType, Track};
 
@@ -367,57 +367,30 @@ async fn get_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginE
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LoginError {
+    #[error("invalid credentials")]
     InvalidCredentials,
+    #[error("invialid app id")]
     InvalidAppId,
-    ReqwestError(reqwest::Error),
+    #[error("reqwest error `{0}`")]
+    ReqwestError(#[from] reqwest::Error),
+    #[error("no user auth token")]
     NoUserAuthToken,
+    #[error("tried to authenticate into a free account which can't download tracks")]
     FreeAccount,
 }
-impl Display for LoginError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidCredentials => write!(f, "Invalid credentials"),
-            Self::InvalidAppId => write!(f, "Invalid app id"),
-            Self::ReqwestError(e) => write!(f, "Reqwest error: {e}"),
-            Self::NoUserAuthToken => write!(f, "No user auth token"),
-            Self::FreeAccount => write!(
-                f,
-                "Tried to authenticate into a free account, which can't download tracks."
-            ),
-        }
-    }
-}
-impl Error for LoginError {}
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ApiError {
+    #[error("downloadable file is a sample")]
     IsSample,
+    #[error("couldn't get key `{0}`")]
     MissingKey(String),
-    SerdeJson(serde_json::Error),
-    Reqwest(reqwest::Error),
-}
-impl Display for ApiError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IsSample => write!(f, "Downloadable file is a sample"),
-            Self::MissingKey(s) => write!(f, "Couldn't get key '{s}'"),
-            Self::SerdeJson(e) => write!(f, "Serde error: {e}"),
-            Self::Reqwest(e) => write!(f, "Reqwest error: {e}"),
-        }
-    }
-}
-impl Error for ApiError {}
-impl From<serde_json::Error> for ApiError {
-    fn from(value: serde_json::Error) -> Self {
-        Self::SerdeJson(value)
-    }
-}
-impl From<reqwest::Error> for ApiError {
-    fn from(value: reqwest::Error) -> Self {
-        Self::Reqwest(value)
-    }
+    #[error("serde error `{0}`")]
+    SerdeJson(#[from] serde_json::Error),
+    #[error("reqwest error `{0}`")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

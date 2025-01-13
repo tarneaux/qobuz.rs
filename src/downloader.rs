@@ -1,10 +1,7 @@
 use crate::{extra::Extra, tag_track, Album, ApiError, FileType, Quality, TaggingError, Track};
 use futures::StreamExt;
-use std::{
-    error::Error,
-    fmt::Display,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use thiserror::Error;
 use tokio::fs::OpenOptions;
 
 #[derive(Debug, Clone)]
@@ -71,47 +68,17 @@ impl Downloader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DownloadError {
-    TaggingError(TaggingError),
-    IoError(std::io::Error),
-    ReqwestError(reqwest::Error),
-    ApiError(ApiError),
+    #[error("tagging error `{0}`")]
+    TaggingError(#[from] TaggingError),
+    #[error("IO error `{0}`")]
+    IoError(#[from] std::io::Error),
+    #[error("reqwest error `{0}`")]
+    ReqwestError(#[from] reqwest::Error),
+    #[error("API error `{0}`")]
+    ApiError(#[from] ApiError),
 }
-
-impl Display for DownloadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TaggingError(e) => write!(f, "tagging error: {e}"),
-            Self::IoError(e) => write!(f, "io error: {e}"),
-            Self::ReqwestError(e) => write!(f, "reqwest error: {e}"),
-            Self::ApiError(e) => write!(f, "api error: {e}"),
-        }
-    }
-}
-
-impl From<std::io::Error> for DownloadError {
-    fn from(value: std::io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
-impl From<TaggingError> for DownloadError {
-    fn from(value: TaggingError) -> Self {
-        Self::TaggingError(value)
-    }
-}
-impl From<reqwest::Error> for DownloadError {
-    fn from(value: reqwest::Error) -> Self {
-        Self::ReqwestError(value)
-    }
-}
-impl From<ApiError> for DownloadError {
-    fn from(value: ApiError) -> Self {
-        Self::ApiError(value)
-    }
-}
-
-impl Error for DownloadError {}
 
 // TODO: configurable path format
 #[must_use]
