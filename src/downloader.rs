@@ -1,4 +1,7 @@
-use crate::{extra::Extra, tag_track, Album, ApiError, FileType, Quality, TaggingError, Track};
+use crate::{
+    extra::{self, Extra},
+    tag_track, Album, ApiError, FileType, Quality, TaggingError, Track,
+};
 use futures::StreamExt;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -35,7 +38,7 @@ impl Downloader {
         }
     }
 
-    /// Download and tag a track.
+    /// Download and tag a track, returning the download locations of the album and track.
     ///
     /// # Example
     ///
@@ -63,50 +66,92 @@ impl Downloader {
         album: &Album<E2>,
         quality: Quality,
         force: bool,
-    ) -> Result<PathBuf, DownloadError>
+    ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        Track<E1>: Extra + Send,
-        Album<E2>: Extra + Send,
+        Track<E1>: Extra,
+        Album<E2>: Extra,
         E1: Sync,
         E2: Sync,
     {
-        let track_loc = self.download_track(track, album, quality, force).await?;
+        let album_loc = self.get_standard_album_location(album, true)?;
+        let track_loc = self
+            .download_track(track, &album_loc, quality, force)
+            .await?;
         let cover_raw = reqwest::get(album.image.large.clone())
             .await?
             .bytes()
             .await?;
         let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
         tag_track(track, &track_loc, album, cover)?;
-        Ok(track_loc)
+        Ok((album_loc, track_loc))
     }
 
-    async fn download_track<E1, E2>(
+    /// Download and tag an album, returning its download location.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use std::path::Path;
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// # let root = Path::new("music");
+    /// # use qobuz::Quality;
+    /// # let downloader = Downloader::new(client.clone(), root);
+    /// // Download "Abbey Road", replacing files if they already exist.
+    /// let album = client
+    ///     .get_album("trrcz9pvaaz6b")
+    ///     .await
+    ///     .unwrap();
+    /// downloader.download_and_tag_album(&album, Quality::Mp3, true);
+    /// # })
+    pub async fn download_and_tag_album(
         &self,
-        track: &Track<E1>,
-        album: &Album<E2>,
+        album: &Album<extra::Tracks>,
+        quality: Quality,
+        force: bool,
+    ) -> Result<PathBuf, DownloadError> {
+        let album_loc = self.get_standard_album_location(album, true)?;
+        let cover_raw = reqwest::get(album.image.large.clone())
+            .await?
+            .bytes()
+            .await?;
+        let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
+        for track in &album.extra.tracks.items {
+            let track_loc = self
+                .download_track(track, &album_loc, quality.clone(), force)
+                .await?;
+            tag_track(track, &track_loc, album, cover.clone())?;
+        }
+        Ok(album_loc)
+    }
+
+    async fn download_track<E>(
+        &self,
+        track: &Track<E>,
+        album_path: &Path,
         quality: Quality,
         force: bool,
     ) -> Result<PathBuf, DownloadError>
     where
-        Track<E1>: Extra + Send,
-        Album<E2>: Extra + Send,
-        E1: Sync,
-        E2: Sync,
+        Track<E>: Extra,
+        E: Sync,
     {
-        self.ensure_album_dir_exists(album)?;
-        let track_loc = get_standard_track_location(&self.root, track, album, &quality);
+        let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .create_new(!force) // (Shadows create and truncate)
-            .open(&track_loc)
+            .open(&track_path)
             .await
         {
             Ok(v) => v,
             Err(e) => {
                 return match e.kind() {
-                    std::io::ErrorKind::AlreadyExists => Ok(track_loc),
+                    std::io::ErrorKind::AlreadyExists => Ok(track_path),
                     _ => Err(DownloadError::IoError(e)),
                 }
             }
@@ -118,18 +163,44 @@ impl Downloader {
         while let Some(item) = bytes_stream.next().await {
             tokio::io::copy(&mut item?.as_ref(), &mut out).await?;
         }
-        Ok(track_loc)
+        Ok(track_path)
     }
 
-    fn ensure_album_dir_exists<E>(&self, album: &Album<E>) -> Result<(), std::io::Error>
+    // TODO: configurable path format
+    pub fn get_standard_album_location<E>(
+        &self,
+        album: &Album<E>,
+        ensure_exists: bool,
+    ) -> Result<PathBuf, std::io::Error>
     where
         Album<E>: Extra,
     {
-        let album_loc = get_standard_album_location(&self.root, album);
-        if !album_loc.is_dir() {
-            std::fs::create_dir_all(&album_loc)?;
+        let mut path = self.root.to_path_buf();
+        path.push(format!(
+            "{} - {}",
+            sanitize_filename(&album.artist.name),
+            sanitize_filename(&album.title),
+        ));
+        if ensure_exists && !path.is_dir() {
+            std::fs::create_dir_all(&path)?;
         }
-        Ok(())
+        Ok(path)
+    }
+
+    #[must_use]
+    pub fn get_standard_track_location<E>(
+        &self,
+        track: &Track<E>,
+        album_path: &Path,
+        quality: &Quality,
+    ) -> PathBuf
+    where
+        Track<E>: Extra,
+    {
+        let mut path = album_path.to_path_buf();
+        path.push(sanitize_filename(&track.title));
+        path.set_extension(FileType::from(quality).to_string());
+        path
     }
 }
 
@@ -143,38 +214,6 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
-}
-
-// TODO: configurable path format
-#[must_use]
-pub fn get_standard_album_location<E>(root: &Path, album: &Album<E>) -> PathBuf
-where
-    Album<E>: Extra,
-{
-    let mut path = root.to_path_buf();
-    path.push(format!(
-        "{} - {}",
-        sanitize_filename(&album.artist.name),
-        sanitize_filename(&album.title),
-    ));
-    path
-}
-
-#[must_use]
-pub fn get_standard_track_location<E1, E2>(
-    root: &Path,
-    track: &Track<E1>,
-    album: &Album<E2>,
-    quality: &Quality,
-) -> PathBuf
-where
-    Track<E1>: Extra,
-    Album<E2>: Extra,
-{
-    let mut path = get_standard_album_location(root, album);
-    path.push(sanitize_filename(&track.title));
-    path.set_extension(FileType::from(quality).to_string());
-    path
 }
 
 #[must_use]
