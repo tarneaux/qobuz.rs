@@ -2,7 +2,7 @@ use crate::{
     extra::{self, Extra},
     tag_track, Album, ApiError, FileType, Quality, TaggingError, Track,
 };
-use futures::StreamExt;
+use futures::{stream, StreamExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::fs::OpenOptions;
@@ -76,17 +76,17 @@ impl Downloader {
         E1: Sync,
         E2: Sync,
     {
-        let album_loc = self.get_standard_album_location(album, true)?;
-        let track_loc = self
-            .download_track(track, &album_loc, quality, force)
+        let album_path = self.get_standard_album_location(album, true)?;
+        let track_path = self
+            .download_track(track, &album_path, quality, force)
             .await?;
         let cover_raw = reqwest::get(album.image.large.clone())
             .await?
             .bytes()
             .await?;
         let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        tag_track(track, &track_loc, album, cover)?;
-        Ok((album_loc, track_loc))
+        tag_track(track, &track_path, album, cover)?;
+        Ok((album_path, track_path))
     }
 
     /// Download and tag an album, returning its download location.
@@ -118,20 +118,29 @@ impl Downloader {
         album: &Album<extra::Tracks>,
         quality: Quality,
         force: bool,
-    ) -> Result<PathBuf, DownloadError> {
-        let album_loc = self.get_standard_album_location(album, true)?;
+    ) -> Result<(PathBuf, Vec<PathBuf>), DownloadError> {
+        let album_path = self.get_standard_album_location(album, true)?;
         let cover_raw = reqwest::get(album.image.large.clone())
             .await?
             .bytes()
             .await?;
         let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        for track in &album.extra.tracks.items {
-            let track_loc = self
-                .download_track(track, &album_loc, quality.clone(), force)
-                .await?;
-            tag_track(track, &track_loc, album, cover.clone())?;
-        }
-        Ok(album_loc)
+        let items = &album.extra.tracks.items;
+
+        let track_paths: Vec<PathBuf> = stream::iter(items)
+            .then(|track| async {
+                let track_path = self
+                    .download_track(track, &album_path, quality.clone(), force)
+                    .await?;
+                tag_track(track, &track_path, album, cover.clone())?;
+                Ok(track_path)
+            })
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<_, DownloadError>>()?;
+
+        Ok((album_path, track_paths))
     }
 
     async fn download_track<E>(
