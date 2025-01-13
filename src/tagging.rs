@@ -14,7 +14,19 @@ where
     Track<E1>: Extra,
     Album<E2>: Extra,
 {
-    let mut tag = audiotags::Tag::new().read_from_path(path)?;
+    let mut tag = match audiotags::Tag::new().read_from_path(path) {
+        Ok(v) => v,
+        Err(e) => match e {
+            audiotags::Error::Id3TagError(ref e2) if matches!(e2.kind, id3::ErrorKind::NoTag) => {
+                // Id3 returns an error when there's no tag saved on the file yet, but then we can
+                // just create a new empty tag.
+                Box::new(audiotags::Id3v2Tag::new())
+            }
+            _ => {
+                return Err(e.into());
+            }
+        },
+    };
     tag.set_title(&track.title);
     tag.set_date(datetime_to_timestamp(track.release_date_original)?);
     tag.set_year(track.release_date_original.year());
