@@ -57,7 +57,10 @@ impl Downloader {
     ///     .get_track("129342731")
     ///     .await
     ///     .unwrap();
-    /// downloader.download_and_tag_track(&track, &track.extra.album, Quality::Mp3, true);
+    /// downloader
+    ///     .download_and_tag_track(&track, &track.extra.album, Quality::Mp3, true)
+    ///     .await
+    ///     .unwrap();
     /// # })
     /// ```
     pub async fn download_and_tag_track<E1, E2>(
@@ -105,7 +108,10 @@ impl Downloader {
     ///     .get_album("trrcz9pvaaz6b")
     ///     .await
     ///     .unwrap();
-    /// downloader.download_and_tag_album(&album, Quality::Mp3, true);
+    /// downloader
+    ///     .download_and_tag_album(&album, Quality::Mp3, true)
+    ///     .await
+    ///     .unwrap();
     /// # })
     pub async fn download_and_tag_album(
         &self,
