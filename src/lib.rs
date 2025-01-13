@@ -8,3 +8,6 @@ pub use downloader::*;
 pub use qobuz_types::*;
 pub use quality::*;
 pub use tagging::*;
+
+#[cfg(test)]
+mod test_utils;

@@ -476,15 +476,8 @@ impl QobuzCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::make_client;
     use tokio::test;
-
-    pub async fn make_client() -> Client {
-        let credentials = QobuzCredentials::from_env()
-            .expect("Couldn't get credentials env variables which need to be set for this test.");
-        Client::new(credentials)
-            .await
-            .expect("Couldn't create client with environment secrets")
-    }
 
     #[test]
     async fn test_get_user_favorites() {

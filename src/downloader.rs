@@ -11,6 +11,22 @@ pub struct Downloader {
 }
 
 impl Downloader {
+    /// Create a new `Downloader` which will use the given `Client` to download to the given
+    /// `Path`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// use qobuz::{QobuzCredentials, Client, Downloader};
+    /// use std::path::Path;
+    /// let credentials = QobuzCredentials::from_env().unwrap();
+    /// let client = Client::new(credentials).await.unwrap();
+    /// let root = Path::new("music");
+    /// let downloader = Downloader::new(client, root);
+    /// # })
+    /// ```
     #[must_use]
     pub fn new(client: crate::Client, root: &Path) -> Self {
         Self {
@@ -19,6 +35,28 @@ impl Downloader {
         }
     }
 
+    /// Download and tag a track.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use std::path::Path;
+    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// # let root = Path::new("music");
+    /// use qobuz::Quality;
+    /// let downloader = Downloader::new(client.clone(), root);
+    /// // Download "Let It Be", replacing the file if it already exists.
+    /// let track = client
+    ///     .get_track("129342731")
+    ///     .await
+    ///     .unwrap();
+    /// downloader.download_and_tag_track(&track, &track.extra.album, Quality::Mp3, true);
+    /// # })
+    /// ```
     pub async fn download_and_tag_track<E1, E2>(
         &self,
         track: &Track<E1>,
@@ -59,14 +97,16 @@ impl Downloader {
         let track_loc = get_standard_track_location(&self.root, track, album, &quality);
         let mut out = match OpenOptions::new()
             .write(true)
-            .create_new(true)
+            .create(true)
+            .truncate(true)
+            .create_new(!force) // (Shadows create and truncate)
             .open(&track_loc)
             .await
         {
             Ok(v) => v,
             Err(e) => {
                 return match e.kind() {
-                    std::io::ErrorKind::AlreadyExists if !force => Ok(track_loc),
+                    std::io::ErrorKind::AlreadyExists => Ok(track_loc),
                     _ => Err(DownloadError::IoError(e)),
                 }
             }
@@ -141,4 +181,35 @@ where
 pub fn sanitize_filename(filename: &str) -> String {
     let filename = filename.trim().replace('/', "-");
     filename.trim_start_matches('.').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::make_client_and_downloader;
+    use tokio::test;
+
+    const HIRES192_TRACK: &str = "18893849"; // Creedence Clearwater Revival - Lodi
+
+    #[test]
+    async fn test_download_and_tag_track() {
+        let (client, downloader) = make_client_and_downloader().await;
+        let track = client
+            .get_track(HIRES192_TRACK)
+            .await
+            .unwrap_or_else(|_| panic!("Couldn't get track {HIRES192_TRACK}"));
+        for quality in [
+            Quality::Mp3,
+            Quality::Cd,
+            Quality::HiRes96,
+            Quality::HiRes192,
+        ] {
+            downloader
+                .download_and_tag_track(&track, &track.extra.album, quality.clone(), true)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!("Couldn't download hires192 track in quality {quality:?}")
+                });
+        }
+    }
 }
