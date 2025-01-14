@@ -1,6 +1,9 @@
 use crate::{
     quality::{FileExtension, Quality},
-    types::{extra, Album, Track},
+    types::{
+        extra::{ExtraFlag, WithExtra, WithoutExtra},
+        Album, Array, Track,
+    },
     ApiError,
 };
 use futures::{stream, StreamExt};
@@ -48,12 +51,11 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
     /// # use std::path::Path;
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
-    /// use qobuz::Quality;
     /// let downloader = Downloader::new(client.clone(), root);
     /// // Download "Let It Be", replacing the file if it already exists.
     /// let track = client
@@ -61,23 +63,21 @@ impl Downloader {
     ///     .await
     ///     .unwrap();
     /// downloader
-    ///     .download_and_tag_track(&track, &track.extra.album, Quality::Mp3, true)
+    ///     .download_and_tag_track(&track, &track.album, Quality::Mp3, true)
     ///     .await
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn download_and_tag_track<E1, E2>(
+    pub async fn download_and_tag_track<EF1: ExtraFlag, EF2: ExtraFlag>(
         &self,
-        track: &Track<E1>,
-        album: &Album<E2>,
+        track: &Track<EF1>,
+        album: &Album<EF2>,
         quality: Quality,
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        Track<E1>: extra::Extra,
-        Album<E2>: extra::Extra,
-        E1: Sync,
-        E2: Sync,
+        <EF1 as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
+        <EF2 as ExtraFlag>::Extra<Array<Track<WithoutExtra>>>: Sync,
     {
         let album_path = self.get_standard_album_location(album, true)?;
         let track_path = self
@@ -96,15 +96,15 @@ impl Downloader {
     ///
     /// # Example
     ///
+    ///
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
     /// # use std::path::Path;
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
-    /// # use qobuz::Quality;
     /// # let downloader = Downloader::new(client.clone(), root);
     /// // Download "Abbey Road", replacing files if they already exist.
     /// let album = client
@@ -118,7 +118,7 @@ impl Downloader {
     /// # })
     pub async fn download_and_tag_album(
         &self,
-        album: &Album<extra::Tracks>,
+        album: &Album<WithExtra>,
         quality: Quality,
         force: bool,
     ) -> Result<(PathBuf, Vec<PathBuf>), DownloadError> {
@@ -128,7 +128,7 @@ impl Downloader {
             .bytes()
             .await?;
         let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        let items = &album.extra.tracks.items;
+        let items = &album.tracks.items;
 
         let track_paths: Vec<PathBuf> = stream::iter(items)
             .then(|track| async {
@@ -146,16 +146,15 @@ impl Downloader {
         Ok((album_path, track_paths))
     }
 
-    async fn download_track<E>(
+    async fn download_track<EF: ExtraFlag>(
         &self,
-        track: &Track<E>,
+        track: &Track<EF>,
         album_path: &Path,
         quality: Quality,
         force: bool,
     ) -> Result<PathBuf, DownloadError>
     where
-        Track<E>: extra::Extra,
-        E: Sync,
+        <EF as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
     {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
@@ -191,7 +190,7 @@ impl Downloader {
         ensure_exists: bool,
     ) -> Result<PathBuf, std::io::Error>
     where
-        Album<E>: extra::Extra,
+        E: ExtraFlag,
     {
         let mut path = self.root.to_path_buf();
         path.push(format!(
@@ -206,14 +205,14 @@ impl Downloader {
     }
 
     #[must_use]
-    pub fn get_standard_track_location<E>(
+    pub fn get_standard_track_location<EF>(
         &self,
-        track: &Track<E>,
+        track: &Track<EF>,
         album_path: &Path,
         quality: &Quality,
     ) -> PathBuf
     where
-        Track<E>: extra::Extra,
+        EF: ExtraFlag,
     {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));
@@ -263,7 +262,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("Couldn't get track {HIRES192_TRACK}"));
         for quality in QUALITIES {
             downloader
-                .download_and_tag_track(&track, &track.extra.album, quality.clone(), true)
+                .download_and_tag_track(&track, &track.album, quality.clone(), true)
                 .await
                 .unwrap_or_else(|_| {
                     panic!("Couldn't download hires192 track in quality {quality:?}")
@@ -277,6 +276,10 @@ mod tests {
         let album = client
             .get_album("lz75qrx8pnjac")
             .await
+            .map_err(|e| {
+                println!("{e:?}");
+                e
+            })
             .unwrap_or_else(|_| panic!("Couldn't get album"));
         downloader
             .download_and_tag_album(&album, Quality::Mp3, true)

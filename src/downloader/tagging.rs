@@ -1,19 +1,15 @@
-use crate::types::{extra::Extra, Album, Track};
+use crate::types::{extra::ExtraFlag, Album, Track};
 use chrono::{Datelike, NaiveDate};
 use id3::frame::Timestamp;
 use std::path::Path;
 use thiserror::Error;
 
-pub fn tag_track<E1, E2>(
-    track: &Track<E1>,
+pub fn tag_track<EF1: ExtraFlag, EF2: ExtraFlag>(
+    track: &Track<EF1>,
     path: &Path,
-    album: &Album<E2>,
+    album: &Album<EF2>,
     album_cover: audiotags::Picture,
-) -> Result<(), TaggingError>
-where
-    Track<E1>: Extra,
-    Album<E2>: Extra,
-{
+) -> Result<(), TaggingError> {
     let mut tag = match audiotags::Tag::new().read_from_path(path) {
         Ok(v) => v,
         Err(e) => match e {

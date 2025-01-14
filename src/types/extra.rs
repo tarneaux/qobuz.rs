@@ -1,84 +1,77 @@
-use crate::types::{Album, Array, Artist, Composer, Playlist, Track};
 use serde::{Deserialize, Serialize};
 
-pub trait Extra: Serialize + for<'a> Deserialize<'a> {
-    type Extra;
-    fn extra_arg<'b>() -> Option<&'b str>;
+use super::{Album, Artist, Playlist, Track};
+
+// TODO: Rename and move this?
+// TODO: More possible extra's ?
+// TODO: Make this an attribute directly on types, that is applied only if needed (?)
+// TODO: OptionalExtra so that we can also query items without deserializing their extra if we
+// don't want them
+// TODO: Rename to something like QueryItself to reflect what the trait is actually used for
+// (i.e. get_item)
+// NOTE: Other possible extra's can be gotten by using a nonexistent extra and showing the text of
+// the response
+pub trait Extra {
+    fn extra_arg<'b>() -> &'b str;
 }
 
-impl Extra for Track<()> {
-    // TODO: Querying tracks returns album and composer by default. Is this
-    // the correct way to represent tracks that have been queried as an
-    // extra themself (i.e. should they implement this trait ?)
-    type Extra = ();
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None
+impl Extra for Track<WithExtra> {
+    fn extra_arg<'b>() -> &'b str {
+        ""
     }
 }
 
-impl Extra for Playlist<()> {
-    type Extra = ();
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None
+impl Extra for Album<WithExtra> {
+    fn extra_arg<'b>() -> &'b str {
+        ""
     }
 }
 
-impl Extra for Album<()> {
-    type Extra = ();
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None
+impl Extra for Artist<WithExtra> {
+    fn extra_arg<'b>() -> &'b str {
+        "tracks,albums"
     }
 }
 
-impl Extra for Artist<()> {
-    type Extra = ();
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None
+impl Extra for Playlist<WithExtra> {
+    fn extra_arg<'b>() -> &'b str {
+        "tracks"
     }
 }
 
-impl Extra for Playlist<Tracks> {
-    type Extra = Tracks;
-    fn extra_arg<'b>() -> Option<&'b str> {
-        Some("tracks")
+// TODO: Rename
+pub trait ExtraReturnedByDefault {}
+
+impl ExtraReturnedByDefault for Track<WithExtra> {}
+impl ExtraReturnedByDefault for Album<WithoutExtra> {}
+impl ExtraReturnedByDefault for Artist<WithoutExtra> {}
+
+// TODO: Upgrade, downgrade methods
+// TODO: Change name ?
+pub trait ExtraFlag {
+    type Extra<T>;
+}
+
+// TODO: Rename, put in enum (enum probably won't work) ?
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WithExtra;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WithoutExtra;
+
+impl ExtraFlag for WithExtra {
+    type Extra<T> = T;
+}
+impl ExtraFlag for WithoutExtra {
+    type Extra<T> = Empty;
+}
+
+// TODO: Is this the right way to do this ? Is there really no way to use () instead ?
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(from = "Option<()>")] // NOTE: Will error out if the field does exist.
+pub struct Empty;
+
+impl From<Option<()>> for Empty {
+    fn from(_: Option<()>) -> Self {
+        Self
     }
-}
-
-impl Extra for Album<Tracks> {
-    type Extra = Tracks;
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None
-    }
-}
-
-impl Extra for Track<AlbumAndComposer> {
-    type Extra = AlbumAndComposer;
-    fn extra_arg<'b>() -> Option<&'b str> {
-        None // Is returned by default when querying tracks
-    }
-}
-
-impl Extra for Artist<AlbumsAndTracks> {
-    type Extra = AlbumsAndTracks;
-    fn extra_arg<'b>() -> Option<&'b str> {
-        Some("albums,tracks")
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Tracks {
-    pub tracks: Array<Track<()>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct AlbumAndComposer {
-    pub album: Album<()>,
-    pub composer: Option<Composer>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct AlbumsAndTracks {
-    pub albums: Array<Album<()>>, // TODO: What is the extra here ?
-    pub tracks: Array<Track<()>>,
 }

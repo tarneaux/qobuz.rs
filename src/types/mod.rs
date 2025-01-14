@@ -4,13 +4,10 @@ use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
 pub mod extra;
-use extra::Extra;
+use extra::{ExtraFlag, WithExtra, WithoutExtra};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Playlist<T>
-where
-    Self: Extra,
-{
+pub struct Playlist<EF: ExtraFlag> {
     pub name: String,
     pub slug: String,
     pub owner: Owner,
@@ -31,9 +28,7 @@ where
     pub is_featured: bool,
     pub updated_at: u64,
     pub users_count: u64,
-
-    #[serde(flatten)]
-    pub extra: T,
+    pub tracks: EF::Extra<Array<Track<WithExtra>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -51,10 +46,7 @@ pub struct Array<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Track<T>
-where
-    Self: Extra,
-{
+pub struct Track<EF: ExtraFlag> {
     pub copyright: String,
     pub displayable: bool,
     pub downloadable: bool,
@@ -79,14 +71,12 @@ where
     pub track_number: u64,
     pub version: Option<String>,
     pub work: Option<String>,
-
-    #[serde(flatten)]
-    pub extra: T,
+    pub album: EF::Extra<Album<WithoutExtra>>,
 }
 
-impl<T> Display for Track<T>
+impl<EF> Display for Track<EF>
 where
-    Self: Extra,
+    EF: ExtraFlag,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (true, year) = self.release_date_original.year_ce() else {
@@ -105,11 +95,8 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Album<T>
-where
-    Self: Extra,
-{
-    pub artist: Artist<()>,
+pub struct Album<EF: ExtraFlag> {
+    pub artist: Artist<WithoutExtra>,
     pub displayable: bool,
     pub downloadable: bool,
     #[serde(with = "ser_duration_u64")]
@@ -127,14 +114,12 @@ where
     pub title: String,
     pub upc: String,
     pub version: Option<String>,
-
-    #[serde(flatten)]
-    pub extra: T,
+    pub tracks: EF::Extra<Array<Track<WithoutExtra>>>,
 }
 
-impl<T> Display for Album<T>
+impl<EF> Display for Album<EF>
 where
-    Self: Extra,
+    EF: ExtraFlag,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -148,24 +133,17 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Artist<T>
-where
-    Self: Extra,
-{
+pub struct Artist<EF: ExtraFlag> {
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
     pub name: String,
     pub slug: String,
-
-    #[serde(flatten)]
-    pub extra: T,
+    pub tracks: EF::Extra<Array<Track<WithExtra>>>,
+    pub albums: EF::Extra<Array<Album<WithoutExtra>>>,
 }
 
-impl<T> Display for Artist<T>
-where
-    Self: Extra,
-{
+impl<EF: ExtraFlag> Display for Artist<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -228,17 +206,16 @@ impl Display for Performer {
     }
 }
 
-pub trait QobuzType: Serialize + for<'a> Deserialize<'a> + Extra {
+pub trait QobuzType {
+    type EF;
     #[must_use]
     fn name_singular<'b>() -> &'b str;
     #[must_use]
     fn name_plural<'b>() -> &'b str;
 }
 
-impl<T> QobuzType for Album<T>
-where
-    Self: Extra,
-{
+impl<EF: ExtraFlag> QobuzType for Album<EF> {
+    type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "album"
     }
@@ -247,10 +224,8 @@ where
     }
 }
 
-impl<T> QobuzType for Track<T>
-where
-    Self: Extra,
-{
+impl<EF: ExtraFlag> QobuzType for Track<EF> {
+    type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "track"
     }
@@ -259,10 +234,8 @@ where
     }
 }
 
-impl<T> QobuzType for Artist<T>
-where
-    Self: Extra,
-{
+impl<EF: ExtraFlag> QobuzType for Artist<EF> {
+    type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "artist"
     }
@@ -271,10 +244,8 @@ where
     }
 }
 
-impl<T> QobuzType for Playlist<T>
-where
-    Self: Extra,
-{
+impl<EF: ExtraFlag> QobuzType for Playlist<EF> {
+    type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "playlist"
     }
