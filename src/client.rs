@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::{
     quality::Quality,
     types::{
-        extra::{Extra, WithExtra, WithoutExtra},
+        extra::{Extra, ExtraReturnedByDefault, WithExtra, WithoutExtra},
         Album, Array, Artist, Playlist, QobuzType, Track,
     },
 };
@@ -110,8 +110,7 @@ impl Client {
     /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
-    // TODO: Further constrain T to only allow types that will be gotten here
-    pub async fn get_user_favorites<T: QobuzType + DeserializeOwned>(
+    pub async fn get_user_favorites<T: QobuzType + DeserializeOwned + ExtraReturnedByDefault>(
         &self,
     ) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();

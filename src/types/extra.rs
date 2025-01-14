@@ -39,6 +39,13 @@ impl Extra for Playlist<WithExtra> {
     }
 }
 
+// TODO: Rename
+pub trait ExtraReturnedByDefault {}
+
+impl ExtraReturnedByDefault for Track<WithExtra> {}
+impl ExtraReturnedByDefault for Album<WithoutExtra> {}
+impl ExtraReturnedByDefault for Artist<WithoutExtra> {}
+
 // TODO: Upgrade, downgrade methods
 // TODO: Change name ?
 pub trait ExtraFlag {
