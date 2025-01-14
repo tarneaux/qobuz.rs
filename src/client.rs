@@ -8,7 +8,10 @@ use thiserror::Error;
 
 use crate::{
     quality::Quality,
-    types::{extra, Album, Array, Artist, Playlist, QobuzType, Track},
+    types::{
+        extra::{self, WithExtra, WithoutExtra},
+        Album, Array, Artist, Playlist, QobuzType, Track,
+    },
 };
 
 const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
@@ -107,7 +110,7 @@ impl Client {
     /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
-    pub async fn get_user_favorites<T: QobuzType<Extra = ()>>(&self) -> Result<Vec<T>, ApiError> {
+    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
         let params = [
             ("type", fav_type),
@@ -138,7 +141,7 @@ impl Client {
     /// let playlists = client.get_user_playlists().await.unwrap();
     /// # })
     /// ```
-    pub async fn get_user_playlists(&self) -> Result<Vec<Playlist<()>>, ApiError> {
+    pub async fn get_user_playlists(&self) -> Result<Vec<Playlist<WithoutExtra>>, ApiError> {
         let params = [
             ("limit", "500"),
             ("offset", "0"), // TODO: walk
@@ -150,7 +153,7 @@ impl Client {
             .get("playlists")
             .ok_or(ApiError::MissingKey("playlists".to_string()))?
             .clone();
-        let array: Array<Playlist<()>> = serde_json::from_value(array)?;
+        let array: Array<Playlist<WithoutExtra>> = serde_json::from_value(array)?;
         Ok(array.items)
     }
 
@@ -166,21 +169,21 @@ impl Client {
     /// use qobuz::{Track, extra::AlbumAndComposer};
     /// // Get information on "Let It Be" (the track)
     /// let track = client
-    ///     .get_item::<Track<()>>("129342731")
+    ///     .get_item::<Album<()>>("129342731")
     ///     .await
     ///     .unwrap();
     /// # })
     /// ```
     pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
     where
-        T: QobuzType,
+        T: QobuzType + extra::Extra,
     {
         Ok(self
             .do_request(
                 &format!("{}/get", T::name_singular()),
                 &[
                     (format!("{}_id", T::name_singular()).as_str(), id),
-                    ("extra", T::extra_arg().unwrap_or("")),
+                    ("extra", T::extra_arg()),
                     ("limit", "500"), // TODO: walk
                     ("offset", "0"),
                 ],
@@ -204,11 +207,18 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_track(
-        &self,
-        track_id: &str,
-    ) -> Result<Track<extra::AlbumAndComposer>, ApiError> {
-        self.get_item(track_id).await
+    pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
+        // TODO: Merge back into get_item
+        Ok(self
+            .do_request(
+                &format!("{}/get", Track::name_singular()),
+                &[
+                    (format!("{}_id", Track::name_singular()).as_str(), track_id),
+                    ("limit", "500"), // TODO: walk
+                    ("offset", "0"),
+                ],
+            )
+            .await?)
     }
 
     /// Get information on a playlist.
@@ -227,10 +237,7 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_playlist(
-        &self,
-        playlist_id: &str,
-    ) -> Result<Playlist<extra::Tracks>, ApiError> {
+    pub async fn get_playlist(&self, playlist_id: &str) -> Result<Playlist<WithExtra>, ApiError> {
         self.get_item(playlist_id).await
     }
 
@@ -250,7 +257,7 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_album(&self, album_id: &str) -> Result<Album<extra::Tracks>, ApiError> {
+    pub async fn get_album(&self, album_id: &str) -> Result<Album<WithExtra>, ApiError> {
         self.get_item(album_id).await
     }
 
@@ -273,7 +280,7 @@ impl Client {
     pub async fn get_artist(
         &self,
         artist_id: &str,
-    ) -> Result<Artist<extra::AlbumsAndTracks>, ApiError> {
+    ) -> Result<Artist<WithExtra, WithExtra>, ApiError> {
         self.get_item(artist_id).await
     }
 
@@ -486,15 +493,15 @@ mod tests {
     async fn test_get_user_favorites() {
         let client = make_client().await;
         client
-            .get_user_favorites::<Album<()>>()
+            .get_user_favorites::<Album<WithoutExtra>>()
             .await
             .expect("Couldn't get user favorites of type Album");
         client
-            .get_user_favorites::<Track<()>>()
+            .get_user_favorites::<Track>()
             .await
             .expect("Couldn't get user favorites of type Track");
         client
-            .get_user_favorites::<Artist<()>>()
+            .get_user_favorites::<Artist<WithoutExtra, WithoutExtra>>()
             .await
             .expect("Couldn't get user favorites of type Artist");
     }

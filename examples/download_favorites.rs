@@ -2,6 +2,7 @@
 
 const DIR: &str = "music";
 
+use qobuz::types::extra::WithoutExtra;
 use qobuz::Downloader;
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +20,7 @@ async fn main() {
         .await
         .unwrap();
     let tracks: Vec<_> = client
-        .get_user_favorites::<Track<()>>()
+        .get_user_favorites::<Track>()
         .await
         .unwrap()
         .into_iter()
@@ -42,11 +43,11 @@ async fn main() {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
                 let path = downloader
-                    .download_and_tag_track(&t, &t.extra.album, Quality::Cd, false)
+                    .download_and_tag_track(&t, &t.album, Quality::Cd, false)
                     .await
                     .unwrap();
                 *playlist.write().await.get_mut(i).unwrap() =
-                    Some(path.to_str().unwrap().to_string());
+                    Some(path.1.to_str().unwrap().to_string());
             }
         })
         .await;

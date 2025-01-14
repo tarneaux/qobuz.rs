@@ -1,6 +1,9 @@
 use crate::{
     quality::{FileExtension, Quality},
-    types::{extra, Album, Track},
+    types::{
+        extra::{ExtraFlag, WithExtra, WithoutExtra},
+        Album, Array, Track,
+    },
     ApiError,
 };
 use futures::{stream, StreamExt};
@@ -66,18 +69,15 @@ impl Downloader {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn download_and_tag_track<E1, E2>(
+    pub async fn download_and_tag_track<EF>(
         &self,
-        track: &Track<E1>,
-        album: &Album<E2>,
+        track: &Track,
+        album: &Album<EF>,
         quality: Quality,
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        Track<E1>: extra::Extra,
-        Album<E2>: extra::Extra,
-        E1: Sync,
-        E2: Sync,
+        EF: ExtraFlag<Array<Track>>,
     {
         let album_path = self.get_standard_album_location(album, true)?;
         let track_path = self
@@ -95,6 +95,7 @@ impl Downloader {
     /// Download and tag an album, returning its download location.
     ///
     /// # Example
+    ///
     ///
     /// ```
     /// # use tokio_test;
@@ -118,7 +119,7 @@ impl Downloader {
     /// # })
     pub async fn download_and_tag_album(
         &self,
-        album: &Album<extra::Tracks>,
+        album: &Album<WithExtra>,
         quality: Quality,
         force: bool,
     ) -> Result<(PathBuf, Vec<PathBuf>), DownloadError> {
@@ -128,7 +129,7 @@ impl Downloader {
             .bytes()
             .await?;
         let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        let items = &album.extra.tracks.items;
+        let items = &album.tracks.items;
 
         let track_paths: Vec<PathBuf> = stream::iter(items)
             .then(|track| async {
@@ -146,17 +147,13 @@ impl Downloader {
         Ok((album_path, track_paths))
     }
 
-    async fn download_track<E>(
+    async fn download_track(
         &self,
-        track: &Track<E>,
+        track: &Track,
         album_path: &Path,
         quality: Quality,
         force: bool,
-    ) -> Result<PathBuf, DownloadError>
-    where
-        Track<E>: extra::Extra,
-        E: Sync,
-    {
+    ) -> Result<PathBuf, DownloadError> {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
             .write(true)
@@ -191,7 +188,7 @@ impl Downloader {
         ensure_exists: bool,
     ) -> Result<PathBuf, std::io::Error>
     where
-        Album<E>: extra::Extra,
+        E: ExtraFlag<Array<Track>>,
     {
         let mut path = self.root.to_path_buf();
         path.push(format!(
@@ -206,15 +203,12 @@ impl Downloader {
     }
 
     #[must_use]
-    pub fn get_standard_track_location<E>(
+    pub fn get_standard_track_location(
         &self,
-        track: &Track<E>,
+        track: &Track,
         album_path: &Path,
         quality: &Quality,
-    ) -> PathBuf
-    where
-        Track<E>: extra::Extra,
-    {
+    ) -> PathBuf {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));
         path.set_extension(FileExtension::from(quality).to_string());
@@ -263,7 +257,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("Couldn't get track {HIRES192_TRACK}"));
         for quality in QUALITIES {
             downloader
-                .download_and_tag_track(&track, &track.extra.album, quality.clone(), true)
+                .download_and_tag_track(&track, &track.album, quality.clone(), true)
                 .await
                 .unwrap_or_else(|_| {
                     panic!("Couldn't download hires192 track in quality {quality:?}")
@@ -277,6 +271,10 @@ mod tests {
         let album = client
             .get_album("lz75qrx8pnjac")
             .await
+            .map_err(|e| {
+                println!("{e:?}");
+                e
+            })
             .unwrap_or_else(|_| panic!("Couldn't get album"));
         downloader
             .download_and_tag_album(&album, Quality::Mp3, true)
