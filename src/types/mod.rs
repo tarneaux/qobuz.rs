@@ -240,8 +240,6 @@ pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
 impl<EF> QobuzType for Album<EF>
 where
     EF: ExtraFlag<Array<Track<WithoutExtra>>>,
-    EF::Extra: for<'a> Deserialize<'a>, // TODO: Shouldn't we constrain Extra in the trait ?
-    EF::Extra: Serialize,
 {
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
@@ -255,8 +253,6 @@ where
 impl<EF> QobuzType for Track<EF>
 where
     EF: ExtraFlag<Album<WithoutExtra>>,
-    EF::Extra: for<'a> Deserialize<'a>,
-    EF::Extra: Serialize,
 {
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
@@ -270,11 +266,7 @@ where
 impl<TEF, AEF> QobuzType for Artist<TEF, AEF>
 where
     TEF: ExtraFlag<Array<Track<WithExtra>>>,
-    TEF::Extra: for<'a> Deserialize<'a>,
-    TEF::Extra: Serialize,
     AEF: ExtraFlag<Array<Album<WithoutExtra>>>,
-    AEF::Extra: for<'a> Deserialize<'a>,
-    AEF::Extra: Serialize,
 {
     type EF = TEF; // FIX: temporary workaround
     fn name_singular<'b>() -> &'b str {
@@ -288,8 +280,6 @@ where
 impl<EF> QobuzType for Playlist<EF>
 where
     EF: ExtraFlag<Array<Track<WithExtra>>>,
-    EF::Extra: for<'a> Deserialize<'a>,
-    EF::Extra: Serialize,
 {
     type EF = EF;
     fn name_singular<'b>() -> &'b str {

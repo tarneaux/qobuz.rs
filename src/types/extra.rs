@@ -46,7 +46,7 @@ impl Extra for Playlist<WithExtra> {
 // TODO: Avoid having to use Type<EF> where ... and replace it with a trait that directly has the
 // correct type ?
 pub trait ExtraFlag<T> {
-    type Extra;
+    type Extra: Serialize + for<'a> Deserialize<'a> + Sync;
 }
 
 // TODO: Rename, put in enum (enum probably won't work) ?
@@ -57,7 +57,7 @@ pub struct WithoutExtra;
 
 impl<T> ExtraFlag<T> for WithExtra
 where
-    T: Serialize + for<'a> Deserialize<'a>,
+    T: Serialize + for<'a> Deserialize<'a> + Sync,
 {
     type Extra = T;
 }
