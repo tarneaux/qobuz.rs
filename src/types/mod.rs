@@ -4,14 +4,14 @@ use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
 pub mod extra;
-use extra::{ExtraFlag, WithoutExtra};
+use extra::{ExtraFlag, WithExtra, WithoutExtra};
 
 // use self::extra::TupleExtract;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlist<EF>
 where
-    EF: ExtraFlag<Array<Track>>,
+    EF: ExtraFlag<Array<Track<WithExtra>>>,
 {
     pub name: String,
     pub slug: String,
@@ -51,7 +51,10 @@ pub struct Array<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Track {
+pub struct Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+{
     pub copyright: String,
     pub displayable: bool,
     pub downloadable: bool,
@@ -76,10 +79,13 @@ pub struct Track {
     pub track_number: u64,
     pub version: Option<String>,
     pub work: Option<String>,
-    pub album: Album<WithoutExtra>,
+    pub album: EF::Extra,
 }
 
-impl Display for Track {
+impl<EF> Display for Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (true, year) = self.release_date_original.year_ce() else {
             panic!("Release year shouldn't be BCE");
@@ -99,7 +105,7 @@ impl Display for Track {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Album<EF>
 where
-    EF: ExtraFlag<Array<Track>>,
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
 {
     pub artist: Artist<WithoutExtra, WithoutExtra>,
     pub displayable: bool,
@@ -124,7 +130,7 @@ where
 
 impl<EF> Display for Album<EF>
 where
-    EF: ExtraFlag<Array<Track>>,
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -140,7 +146,7 @@ where
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Artist<TEF, AEF>
 where
-    TEF: ExtraFlag<Array<Track>>,
+    TEF: ExtraFlag<Array<Track<WithExtra>>>,
     AEF: ExtraFlag<Array<Album<WithoutExtra>>>,
     // TODO: Change to something like
     // EF: ExtraFlag<(Array<Album<WithoutExtra>>, Array<Track<WithoutExtra>>)>,
@@ -158,7 +164,7 @@ where
 
 impl<TEF, AEF> Display for Artist<TEF, AEF>
 where
-    TEF: ExtraFlag<Array<Track>>,
+    TEF: ExtraFlag<Array<Track<WithExtra>>>,
     AEF: ExtraFlag<Array<Album<WithoutExtra>>>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -233,8 +239,8 @@ pub trait QobuzType: Serialize + for<'a> Deserialize<'a> {
 
 impl<EF> QobuzType for Album<EF>
 where
-    EF: ExtraFlag<Array<Track>>,
-    EF::Extra: for<'a> Deserialize<'a>,
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+    EF::Extra: for<'a> Deserialize<'a>, // TODO: Shouldn't we constrain Extra in the trait ?
     EF::Extra: Serialize,
 {
     type EF = EF;
@@ -246,8 +252,13 @@ where
     }
 }
 
-impl QobuzType for Track {
-    type EF = WithoutExtra; // TODO: seems unclean
+impl<EF> QobuzType for Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+    EF::Extra: for<'a> Deserialize<'a>,
+    EF::Extra: Serialize,
+{
+    type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "track"
     }
@@ -258,7 +269,7 @@ impl QobuzType for Track {
 
 impl<TEF, AEF> QobuzType for Artist<TEF, AEF>
 where
-    TEF: ExtraFlag<Array<Track>>,
+    TEF: ExtraFlag<Array<Track<WithExtra>>>,
     TEF::Extra: for<'a> Deserialize<'a>,
     TEF::Extra: Serialize,
     AEF: ExtraFlag<Array<Album<WithoutExtra>>>,
@@ -276,7 +287,7 @@ where
 
 impl<EF> QobuzType for Playlist<EF>
 where
-    EF: ExtraFlag<Array<Track>>,
+    EF: ExtraFlag<Array<Track<WithExtra>>>,
     EF::Extra: for<'a> Deserialize<'a>,
     EF::Extra: Serialize,
 {

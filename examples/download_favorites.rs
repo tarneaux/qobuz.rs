@@ -2,7 +2,7 @@
 
 const DIR: &str = "music";
 
-use qobuz::types::extra::WithoutExtra;
+use qobuz::types::extra::WithExtra;
 use qobuz::Downloader;
 use std::path::Path;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ async fn main() {
         .await
         .unwrap();
     let tracks: Vec<_> = client
-        .get_user_favorites::<Track>()
+        .get_user_favorites::<Track<WithExtra>>()
         .await
         .unwrap()
         .into_iter()

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use qobuz::{
-    types::{extra::WithoutExtra, Track},
+    types::{extra::WithExtra, Track},
     Client, QobuzCredentials,
 };
 
@@ -11,7 +11,10 @@ async fn main() {
         .await
         .unwrap();
 
-    let favorites = client.get_user_favorites::<Track>().await.unwrap();
+    let favorites = client
+        .get_user_favorites::<Track<WithExtra>>()
+        .await
+        .unwrap();
     println!("= Favorite tracks =");
     for fav in favorites.iter().map(|v| format!("{v}")) {
         println!("{fav}");

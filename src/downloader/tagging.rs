@@ -4,14 +4,15 @@ use id3::frame::Timestamp;
 use std::path::Path;
 use thiserror::Error;
 
-pub fn tag_track<EF>(
-    track: &Track,
+pub fn tag_track<EF1, EF2>(
+    track: &Track<EF1>,
     path: &Path,
-    album: &Album<EF>,
+    album: &Album<EF2>,
     album_cover: audiotags::Picture,
 ) -> Result<(), TaggingError>
 where
-    EF: ExtraFlag<Array<Track>>,
+    EF1: ExtraFlag<Album<WithoutExtra>>,
+    EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
 {
     let mut tag = match audiotags::Tag::new().read_from_path(path) {
         Ok(v) => v,

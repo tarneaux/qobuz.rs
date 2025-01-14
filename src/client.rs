@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::{
     quality::Quality,
     types::{
-        extra::{self, WithExtra, WithoutExtra},
+        extra::{Extra, WithExtra, WithoutExtra},
         Album, Array, Artist, Playlist, QobuzType, Track,
     },
 };
@@ -110,6 +110,8 @@ impl Client {
     /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
+    // TODO: Further constrain T to only allow types that will be gotten here (with extra for
+    // tracks, without otherwise)
     pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
         let params = [
@@ -176,7 +178,7 @@ impl Client {
     /// ```
     pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
     where
-        T: QobuzType + extra::Extra,
+        T: QobuzType + Extra,
     {
         Ok(self
             .do_request(
@@ -207,18 +209,8 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_track(&self, track_id: &str) -> Result<Track, ApiError> {
-        // TODO: Merge back into get_item
-        Ok(self
-            .do_request(
-                &format!("{}/get", Track::name_singular()),
-                &[
-                    (format!("{}_id", Track::name_singular()).as_str(), track_id),
-                    ("limit", "500"), // TODO: walk
-                    ("offset", "0"),
-                ],
-            )
-            .await?)
+    pub async fn get_track(&self, track_id: &str) -> Result<Track<WithExtra>, ApiError> {
+        self.get_item(track_id).await
     }
 
     /// Get information on a playlist.
@@ -497,7 +489,7 @@ mod tests {
             .await
             .expect("Couldn't get user favorites of type Album");
         client
-            .get_user_favorites::<Track>()
+            .get_user_favorites::<Track<WithExtra>>()
             .await
             .expect("Couldn't get user favorites of type Track");
         client
@@ -522,7 +514,7 @@ mod tests {
             .await
             .get_track_file_url(track_id, Quality::HiRes96)
             .await
-            .unwrap_or_else(|_| panic!("Couldn't get track file url for track {track_id}"));
+            .unwrap_or_else(|_| panic!("Couldn't get track file url"));
     }
 
     #[test]
@@ -560,7 +552,7 @@ mod tests {
         client
             .get_artist(artist_id)
             .await
-            .unwrap_or_else(|_| panic!("Couldn't get artist {artist_id}"));
+            .expect("Couldn't get artist");
         client
             .get_artist("no")
             .await
@@ -574,7 +566,7 @@ mod tests {
         client
             .get_playlist(playlist_id)
             .await
-            .unwrap_or_else(|_| panic!("Couldn't  get playlist {playlist_id}"));
+            .expect("Couldn't get playlist");
         client
             .get_playlist("no")
             .await

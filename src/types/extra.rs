@@ -7,15 +7,23 @@ use super::{Album, Artist, Playlist, Track};
 // TODO: Make this an attribute directly on types, that is applied only if needed (?)
 // TODO: OptionalExtra so that we can also query items without deserializing their extra if we
 // don't want them
+// TODO: Rename to something like QueryItself to reflect what the trait is actually used for
+// (i.e. get_item)
 // NOTE: Other possible extra's can be gotten by using a nonexistent extra and showing the text of
 // the response
 pub trait Extra {
     fn extra_arg<'b>() -> &'b str;
 }
 
+impl Extra for Track<WithExtra> {
+    fn extra_arg<'b>() -> &'b str {
+        ""
+    }
+}
+
 impl Extra for Album<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
-        "" // FIX: there seems to be an error here
+        ""
     }
 }
 
@@ -35,6 +43,8 @@ impl Extra for Playlist<WithExtra> {
 
 // TODO: Upgrade, downgrade methods
 // TODO: Change name ?
+// TODO: Avoid having to use Type<EF> where ... and replace it with a trait that directly has the
+// correct type ?
 pub trait ExtraFlag<T> {
     type Extra;
 }

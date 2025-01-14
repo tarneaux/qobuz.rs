@@ -69,15 +69,16 @@ impl Downloader {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn download_and_tag_track<EF>(
+    pub async fn download_and_tag_track<EF1, EF2>(
         &self,
-        track: &Track,
-        album: &Album<EF>,
+        track: &Track<EF1>,
+        album: &Album<EF2>,
         quality: Quality,
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        EF: ExtraFlag<Array<Track>>,
+        EF1: ExtraFlag<Album<WithoutExtra>>,
+        EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
         let album_path = self.get_standard_album_location(album, true)?;
         let track_path = self
@@ -147,13 +148,16 @@ impl Downloader {
         Ok((album_path, track_paths))
     }
 
-    async fn download_track(
+    async fn download_track<EF>(
         &self,
-        track: &Track,
+        track: &Track<EF>,
         album_path: &Path,
         quality: Quality,
         force: bool,
-    ) -> Result<PathBuf, DownloadError> {
+    ) -> Result<PathBuf, DownloadError>
+    where
+        EF: ExtraFlag<Album<WithoutExtra>>,
+    {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
             .write(true)
@@ -188,7 +192,7 @@ impl Downloader {
         ensure_exists: bool,
     ) -> Result<PathBuf, std::io::Error>
     where
-        E: ExtraFlag<Array<Track>>,
+        E: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
         let mut path = self.root.to_path_buf();
         path.push(format!(
@@ -203,12 +207,15 @@ impl Downloader {
     }
 
     #[must_use]
-    pub fn get_standard_track_location(
+    pub fn get_standard_track_location<EF>(
         &self,
-        track: &Track,
+        track: &Track<EF>,
         album_path: &Path,
         quality: &Quality,
-    ) -> PathBuf {
+    ) -> PathBuf
+    where
+        EF: ExtraFlag<Album<WithoutExtra>>,
+    {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));
         path.set_extension(FileExtension::from(quality).to_string());
