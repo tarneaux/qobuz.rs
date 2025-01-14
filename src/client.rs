@@ -56,7 +56,7 @@ impl Client {
     /// # use qobuz::{QobuzCredentials, Client};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// use qobuz::Quality;
+    /// use qobuz::quality::Quality;
     /// // Get download URL of "Let it Be" (the track)
     /// let track = client
     ///     .get_track_file_url("129342731", Quality::HiRes96)
@@ -105,9 +105,9 @@ impl Client {
     /// # use qobuz::{QobuzCredentials, Client};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// use qobuz::Track;
+    /// use qobuz::types::{Track, extra::WithExtra};
     /// // Get the user's favorite tracks
-    /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
+    /// let favorites = client.get_user_favorites::<Track<WithExtra>>().await.unwrap();
     /// # })
     /// ```
     pub async fn get_user_favorites<T: QobuzType + DeserializeOwned + ExtraReturnedByDefault>(
@@ -168,10 +168,10 @@ impl Client {
     /// # use qobuz::{QobuzCredentials, Client};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// use qobuz::{Track, extra::AlbumAndComposer};
+    /// use qobuz::{types::Track, types::extra::WithExtra};
     /// // Get information on "Let It Be" (the track)
     /// let track = client
-    ///     .get_item::<Album<()>>("129342731")
+    ///     .get_item::<Track<WithExtra>>("129342731")
     ///     .await
     ///     .unwrap();
     /// # })
@@ -279,10 +279,9 @@ impl Client {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use qobuz::Quality;
     /// use tokio::fs::File;
     /// use futures::StreamExt;
-    /// # use qobuz::{QobuzCredentials, Client};
+    /// # use qobuz::{QobuzCredentials, Client, quality::Quality};
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// // Download the "Let It Be" track to test.mp3

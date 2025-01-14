@@ -51,12 +51,11 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
     /// # use std::path::Path;
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
-    /// use qobuz::Quality;
     /// let downloader = Downloader::new(client.clone(), root);
     /// // Download "Let It Be", replacing the file if it already exists.
     /// let track = client
@@ -64,7 +63,7 @@ impl Downloader {
     ///     .await
     ///     .unwrap();
     /// downloader
-    ///     .download_and_tag_track(&track, &track.extra.album, Quality::Mp3, true)
+    ///     .download_and_tag_track(&track, &track.album, Quality::Mp3, true)
     ///     .await
     ///     .unwrap();
     /// # })
@@ -101,12 +100,11 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader};
+    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
     /// # use std::path::Path;
     /// # let credentials = QobuzCredentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
-    /// # use qobuz::Quality;
     /// # let downloader = Downloader::new(client.clone(), root);
     /// // Download "Abbey Road", replacing files if they already exist.
     /// let album = client
