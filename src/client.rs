@@ -110,8 +110,7 @@ impl Client {
     /// let favorites = client.get_user_favorites::<Track<()>>().await.unwrap();
     /// # })
     /// ```
-    // TODO: Further constrain T to only allow types that will be gotten here (with extra for
-    // tracks, without otherwise)
+    // TODO: Further constrain T to only allow types that will be gotten here
     pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
         let params = [

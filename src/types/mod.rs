@@ -6,8 +6,6 @@ use url::Url;
 pub mod extra;
 use extra::{ExtraFlag, WithExtra, WithoutExtra};
 
-// use self::extra::TupleExtract;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlist<EF>
 where
@@ -148,16 +146,13 @@ pub struct Artist<TEF, AEF>
 where
     TEF: ExtraFlag<Array<Track<WithExtra>>>,
     AEF: ExtraFlag<Array<Album<WithoutExtra>>>,
-    // TODO: Change to something like
-    // EF: ExtraFlag<(Array<Album<WithoutExtra>>, Array<Track<WithoutExtra>>)>,
+    // TODO: clearer distinction between TEF and AEF
 {
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
     pub name: String,
     pub slug: String,
-    // pub albums: <EF::Extra as TupleExtract>::T1,
-    // pub tracks: <EF::Extra as TupleExtract>::T2,
     pub tracks: TEF::Extra,
     pub albums: AEF::Extra,
 }

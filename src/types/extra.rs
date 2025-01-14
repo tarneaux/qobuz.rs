@@ -67,7 +67,7 @@ impl<T> ExtraFlag<T> for WithoutExtra {
 
 // TODO: Is this the right way to do this ? Is there really no way to use () instead ?
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(from = "Option<()>")] // Very ugly, will error out if the field does exist.
+#[serde(from = "Option<()>")] // NOTE: Will error out if the field does exist.
 pub struct Empty;
 
 impl From<Option<()>> for Empty {
@@ -75,36 +75,3 @@ impl From<Option<()>> for Empty {
         Self
     }
 }
-
-// pub trait TupleExtract {
-// type T1;
-// type T2;
-// }
-
-// impl<T1, T2> TupleExtract for (T1, T2) {
-// type T1 = T1;
-// type T2 = T2;
-// }
-
-// impl TupleExtract for () {
-// type T1 = ();
-// type T2 = ();
-// }
-
-// #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-// #[serde(rename_all = "camelCase")]
-// pub struct Tracks {
-//     pub tracks: Array<Track<()>>,
-// }
-
-// #[derive(serialize, deserialize, debug, clone, partialeq, eq)]
-// pub struct AlbumAndComposer {
-//     pub album: Album<()>,
-//     pub composer: Option<Composer>,
-// }
-
-// #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-// pub struct AlbumsAndTracks {
-//     pub albums: Array<Album<()>>, // TODO: What is the extra here ?
-//     pub tracks: Array<Track<()>>,
-// }
