@@ -27,9 +27,7 @@ impl Extra for Album<WithExtra> {
     }
 }
 
-/// FIX: If we keep this implementation with two extra flags, there should be more than just this
-/// implementation
-impl Extra for Artist<WithExtra, WithExtra> {
+impl Extra for Artist<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
         "tracks,albums"
     }
@@ -43,10 +41,8 @@ impl Extra for Playlist<WithExtra> {
 
 // TODO: Upgrade, downgrade methods
 // TODO: Change name ?
-// TODO: Avoid having to use Type<EF> where ... and replace it with a trait that directly has the
-// correct type ?
-pub trait ExtraFlag<T> {
-    type Extra: Serialize + for<'a> Deserialize<'a> + Sync;
+pub trait ExtraFlag {
+    type Extra<T>;
 }
 
 // TODO: Rename, put in enum (enum probably won't work) ?
@@ -55,14 +51,11 @@ pub struct WithExtra;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WithoutExtra;
 
-impl<T> ExtraFlag<T> for WithExtra
-where
-    T: Serialize + for<'a> Deserialize<'a> + Sync,
-{
-    type Extra = T;
+impl ExtraFlag for WithExtra {
+    type Extra<T> = T;
 }
-impl<T> ExtraFlag<T> for WithoutExtra {
-    type Extra = Empty;
+impl ExtraFlag for WithoutExtra {
+    type Extra<T> = Empty;
 }
 
 // TODO: Is this the right way to do this ? Is there really no way to use () instead ?

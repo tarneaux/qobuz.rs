@@ -111,7 +111,9 @@ impl Client {
     /// # })
     /// ```
     // TODO: Further constrain T to only allow types that will be gotten here
-    pub async fn get_user_favorites<T: QobuzType>(&self) -> Result<Vec<T>, ApiError> {
+    pub async fn get_user_favorites<T: QobuzType + DeserializeOwned>(
+        &self,
+    ) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
         let params = [
             ("type", fav_type),
@@ -177,7 +179,7 @@ impl Client {
     /// ```
     pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
     where
-        T: QobuzType + Extra,
+        T: QobuzType + Extra + DeserializeOwned,
     {
         Ok(self
             .do_request(
@@ -268,10 +270,7 @@ impl Client {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn get_artist(
-        &self,
-        artist_id: &str,
-    ) -> Result<Artist<WithExtra, WithExtra>, ApiError> {
+    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist<WithExtra>, ApiError> {
         self.get_item(artist_id).await
     }
 
@@ -492,7 +491,7 @@ mod tests {
             .await
             .expect("Couldn't get user favorites of type Track");
         client
-            .get_user_favorites::<Artist<WithoutExtra, WithoutExtra>>()
+            .get_user_favorites::<Artist<WithoutExtra>>()
             .await
             .expect("Couldn't get user favorites of type Artist");
     }

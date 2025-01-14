@@ -69,7 +69,7 @@ impl Downloader {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn download_and_tag_track<EF1, EF2>(
+    pub async fn download_and_tag_track<EF1: ExtraFlag, EF2: ExtraFlag>(
         &self,
         track: &Track<EF1>,
         album: &Album<EF2>,
@@ -77,8 +77,8 @@ impl Downloader {
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        EF1: ExtraFlag<Album<WithoutExtra>>,
-        EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
+        <EF1 as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
+        <EF2 as ExtraFlag>::Extra<Array<Track<WithoutExtra>>>: Sync,
     {
         let album_path = self.get_standard_album_location(album, true)?;
         let track_path = self
@@ -148,7 +148,7 @@ impl Downloader {
         Ok((album_path, track_paths))
     }
 
-    async fn download_track<EF>(
+    async fn download_track<EF: ExtraFlag>(
         &self,
         track: &Track<EF>,
         album_path: &Path,
@@ -156,7 +156,7 @@ impl Downloader {
         force: bool,
     ) -> Result<PathBuf, DownloadError>
     where
-        EF: ExtraFlag<Album<WithoutExtra>>,
+        <EF as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
     {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
@@ -192,7 +192,7 @@ impl Downloader {
         ensure_exists: bool,
     ) -> Result<PathBuf, std::io::Error>
     where
-        E: ExtraFlag<Array<Track<WithoutExtra>>>,
+        E: ExtraFlag,
     {
         let mut path = self.root.to_path_buf();
         path.push(format!(
@@ -214,7 +214,7 @@ impl Downloader {
         quality: &Quality,
     ) -> PathBuf
     where
-        EF: ExtraFlag<Album<WithoutExtra>>,
+        EF: ExtraFlag,
     {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));
