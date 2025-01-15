@@ -1,10 +1,12 @@
+pub mod extra;
+pub mod traits;
+
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use extra::{ExtraFlag, WithExtra, WithoutExtra};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
-pub mod extra;
-use extra::{ExtraFlag, WithExtra, WithoutExtra};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlist<EF: ExtraFlag> {

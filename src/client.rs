@@ -9,7 +9,8 @@ use thiserror::Error;
 use crate::{
     quality::Quality,
     types::{
-        extra::{Extra, ExtraReturnedByDefault, WithExtra, WithoutExtra},
+        extra::{RootEntity, WithExtra, WithoutExtra},
+        traits::Favoritable,
         Album, Array, Artist, Playlist, QobuzType, Track,
     },
 };
@@ -110,7 +111,7 @@ impl Client {
     /// let favorites = client.get_user_favorites::<Track<WithExtra>>().await.unwrap();
     /// # })
     /// ```
-    pub async fn get_user_favorites<T: QobuzType + DeserializeOwned + ExtraReturnedByDefault>(
+    pub async fn get_user_favorites<T: QobuzType + DeserializeOwned + Favoritable>(
         &self,
     ) -> Result<Vec<T>, ApiError> {
         let fav_type = T::name_plural();
@@ -178,7 +179,7 @@ impl Client {
     /// ```
     pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
     where
-        T: QobuzType + Extra + DeserializeOwned,
+        T: QobuzType + RootEntity + DeserializeOwned,
     {
         Ok(self
             .do_request(

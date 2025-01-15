@@ -2,49 +2,47 @@ use serde::{Deserialize, Serialize};
 
 use super::{Album, Artist, Playlist, Track};
 
-// TODO: Rename and move this?
 // TODO: More possible extra's ?
 // TODO: Make this an attribute directly on types, that is applied only if needed (?)
-// TODO: OptionalExtra so that we can also query items without deserializing their extra if we
+// TODO: optional variant so that we can also query items without deserializing their extra if we
 // don't want them
-// TODO: Rename to something like QueryItself to reflect what the trait is actually used for
-// (i.e. get_item)
 // NOTE: Other possible extra's can be gotten by using a nonexistent extra and showing the text of
 // the response
-pub trait Extra {
+pub trait RootEntity {
     fn extra_arg<'b>() -> &'b str;
 }
 
-impl Extra for Track<WithExtra> {
+impl RootEntity for Track<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
         ""
     }
 }
 
-impl Extra for Album<WithExtra> {
+impl RootEntity for Album<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
         ""
     }
 }
 
-impl Extra for Artist<WithExtra> {
+impl RootEntity for Artist<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
         "tracks,albums"
     }
 }
 
-impl Extra for Playlist<WithExtra> {
+impl RootEntity for Playlist<WithExtra> {
     fn extra_arg<'b>() -> &'b str {
         "tracks"
     }
 }
 
 // TODO: Rename
-pub trait ExtraReturnedByDefault {}
+pub trait ImplicitExtra {}
 
-impl ExtraReturnedByDefault for Track<WithExtra> {}
-impl ExtraReturnedByDefault for Album<WithoutExtra> {}
-impl ExtraReturnedByDefault for Artist<WithoutExtra> {}
+impl ImplicitExtra for Track<WithExtra> {}
+impl ImplicitExtra for Album<WithoutExtra> {}
+impl ImplicitExtra for Artist<WithoutExtra> {}
+impl ImplicitExtra for Playlist<WithExtra> {}
 
 // TODO: Upgrade, downgrade methods
 // TODO: Change name ?
