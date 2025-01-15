@@ -74,10 +74,7 @@ pub struct Track<EF: ExtraFlag> {
     pub album: EF::Extra<Album<WithoutExtra>>,
 }
 
-impl<EF> Display for Track<EF>
-where
-    EF: ExtraFlag,
-{
+impl<EF: ExtraFlag> Display for Track<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (true, year) = self.release_date_original.year_ce() else {
             panic!("Release year shouldn't be BCE");
@@ -117,10 +114,7 @@ pub struct Album<EF: ExtraFlag> {
     pub tracks: EF::Extra<Array<Track<WithoutExtra>>>,
 }
 
-impl<EF> Display for Album<EF>
-where
-    EF: ExtraFlag,
-{
+impl<EF: ExtraFlag> Display for Album<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

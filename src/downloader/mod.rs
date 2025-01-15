@@ -184,14 +184,11 @@ impl Downloader {
     }
 
     // TODO: configurable path format
-    pub fn get_standard_album_location<E>(
+    pub fn get_standard_album_location<E: ExtraFlag>(
         &self,
         album: &Album<E>,
         ensure_exists: bool,
-    ) -> Result<PathBuf, std::io::Error>
-    where
-        E: ExtraFlag,
-    {
+    ) -> Result<PathBuf, std::io::Error> {
         let mut path = self.root.to_path_buf();
         path.push(format!(
             "{} - {}",
