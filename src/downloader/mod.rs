@@ -241,6 +241,7 @@ pub fn sanitize_filename(filename: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::test_utils::make_client_and_downloader;
     use tokio::test;
@@ -256,17 +257,12 @@ mod tests {
     #[test]
     async fn test_download_and_tag_track() {
         let (client, downloader) = make_client_and_downloader().await;
-        let track = client
-            .get_track(HIRES192_TRACK)
-            .await
-            .unwrap_or_else(|_| panic!("Couldn't get track {HIRES192_TRACK}"));
+        let track = client.get_track(HIRES192_TRACK).await.unwrap();
         for quality in QUALITIES {
             downloader
                 .download_and_tag_track(&track, &track.album, quality.clone(), true)
                 .await
-                .unwrap_or_else(|_| {
-                    panic!("Couldn't download hires192 track in quality {quality:?}")
-                });
+                .unwrap();
         }
     }
 
@@ -280,10 +276,10 @@ mod tests {
                 println!("{e:?}");
                 e
             })
-            .unwrap_or_else(|_| panic!("Couldn't get album"));
+            .unwrap();
         downloader
             .download_and_tag_album(&album, Quality::Mp3, true)
             .await
-            .expect("Couldn't download hires192 track in Mp3 quality");
+            .unwrap();
     }
 }

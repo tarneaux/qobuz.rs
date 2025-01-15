@@ -473,6 +473,7 @@ impl QobuzCredentials {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::test_utils::make_client;
     use tokio::test;
@@ -483,24 +484,21 @@ mod tests {
         client
             .get_user_favorites::<Album<WithoutExtra>>()
             .await
-            .expect("Couldn't get user favorites of type Album");
+            .unwrap();
         client
             .get_user_favorites::<Track<WithExtra>>()
             .await
-            .expect("Couldn't get user favorites of type Track");
+            .unwrap();
         client
             .get_user_favorites::<Artist<WithoutExtra>>()
             .await
-            .expect("Couldn't get user favorites of type Artist");
+            .unwrap();
     }
 
     #[test]
     async fn test_get_user_playlists() {
         let client = make_client().await;
-        client
-            .get_user_playlists()
-            .await
-            .expect("Couldn't get user playlists");
+        client.get_user_playlists().await.unwrap();
     }
 
     #[test]
@@ -510,75 +508,50 @@ mod tests {
             .await
             .get_track_file_url(track_id, Quality::HiRes96)
             .await
-            .unwrap_or_else(|_| panic!("Couldn't get track file url"));
+            .unwrap();
     }
 
     #[test]
     async fn test_get_track() {
         let client = make_client().await;
         let track_id = "64868955";
-        client
-            .get_track(track_id)
-            .await
-            .unwrap_or_else(|_| panic!("Couldn't get track {track_id}"));
-        client
-            .get_track("no")
-            .await
-            .expect_err("There should be no track with id 'no'");
+        client.get_track(track_id).await.unwrap();
+        client.get_track("no").await.unwrap_err();
     }
 
     #[test]
     async fn test_get_album() {
         let client = make_client().await;
         let album_id = "trrcz9pvaaz6b";
-        client
-            .get_album(album_id)
-            .await
-            .unwrap_or_else(|_| panic!("Couldn't get album {album_id}"));
-        client
-            .get_album("no")
-            .await
-            .expect_err("There should be no album with id 'no'");
+        client.get_album(album_id).await.unwrap();
+        client.get_album("no").await.unwrap_err();
     }
 
     #[test]
     async fn test_get_artist() {
         let client = make_client().await;
         let artist_id = "26390";
-        client
-            .get_artist(artist_id)
-            .await
-            .expect("Couldn't get artist");
-        client
-            .get_artist("no")
-            .await
-            .expect_err("There should be no artist with id 'no'");
+        client.get_artist(artist_id).await.unwrap();
+        client.get_artist("no").await.unwrap_err();
     }
 
     #[test]
     async fn test_get_playlist() {
         let client = make_client().await;
         let playlist_id = "1141084"; // Official Qobuz playlist
-        client
-            .get_playlist(playlist_id)
-            .await
-            .expect("Couldn't get playlist");
-        client
-            .get_playlist("no")
-            .await
-            .expect_err("There should be no playlist with id 'no'");
-        // TODO: First  user playlist
+        client.get_playlist(playlist_id).await.unwrap();
+        client.get_playlist("no").await.unwrap_err();
+        // TODO: First user playlist
     }
 
     #[test]
     async fn test_stream_track() {
         use futures::StreamExt;
-        let track_id = "64868955";
         let mut stream = make_client()
             .await
-            .stream_track(track_id, Quality::HiRes96)
+            .stream_track("64868955", Quality::HiRes96)
             .await
-            .unwrap_or_else(|_| panic!("Coudln't stream track with ID {track_id}"));
+            .unwrap();
         assert!(stream.next().await.is_some());
     }
 }
