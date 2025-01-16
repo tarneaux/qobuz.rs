@@ -405,10 +405,10 @@ pub enum ApiError {
     IsSample,
     #[error("couldn't get key `{0}`")]
     MissingKey(String),
-    #[error("serde error `{0}`")]
-    SerdeJson(#[from] serde_json::Error),
+    #[error("serde_json error `{0}`")]
+    SerdeJsonError(#[from] serde_json::Error),
     #[error("reqwest error `{0}`")]
-    Reqwest(#[from] reqwest::Error),
+    ReqwestError(#[from] reqwest::Error),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
