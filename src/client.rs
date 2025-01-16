@@ -39,8 +39,8 @@ impl Client {
     /// # })
     /// ```
     pub async fn new(credentials: QobuzCredentials) -> Result<Self, LoginError> {
-        let token = get_auth_token(&credentials).await?;
-        let reqwest_client = make_http_client(&credentials.app_id, Some(&token));
+        let uat = get_user_auth_token(&credentials).await?;
+        let reqwest_client = make_http_client(&credentials.app_id, Some(&uat));
 
         Ok(Self {
             reqwest_client,
@@ -338,7 +338,7 @@ async fn do_request<T: DeserializeOwned>(
         .await
 }
 
-async fn get_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginError> {
+async fn get_user_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginError> {
     let client = make_http_client(&credentials.app_id, None);
     let params = [
         ("email", credentials.email.as_str()),
@@ -361,7 +361,7 @@ async fn get_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginE
         .get("parameters")
         .ok_or(LoginError::FreeAccount)?;
     match resp.get("user_auth_token") {
-        Some(Value::String(token)) => Ok(token.to_string()),
+        Some(Value::String(uat)) => Ok(uat.to_string()),
         None | Some(_) => Err(LoginError::NoUserAuthToken),
     }
 }
@@ -408,10 +408,10 @@ fn make_http_client(app_id: &str, uat: Option<&str>) -> reqwest::Client {
             .parse()
             .expect("Coudln't parse static content type"),
     );
-    if let Some(token) = uat {
+    if let Some(uat) = uat {
         headers.insert(
             "X-User-Auth-Token",
-            token.parse().expect("Coudln't parse auth token"),
+            uat.parse().expect("Coudln't parse user auth token"),
         );
     }
     reqwest::ClientBuilder::new()
