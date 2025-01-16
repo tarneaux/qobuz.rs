@@ -6,8 +6,6 @@ use super::{Album, Artist, Playlist, Track};
 // TODO: Make this an attribute directly on types, that is applied only if needed (?)
 // TODO: optional variant so that we can also query items without deserializing their extra if we
 // don't want them
-// NOTE: Other possible extra's can be gotten by using a nonexistent extra and showing the text of
-// the response
 pub trait RootEntity {
     fn extra_arg<'b>() -> &'b str;
 }
