@@ -354,12 +354,14 @@ async fn get_user_auth_token(credentials: &QobuzCredentials) -> Result<String, L
         })?;
     // verify json["user"]["credential"]["parameters"] exists.
     // If not, we are authenticating into a free account which can't download tracks.
-    resp.get("user")
-        .ok_or(LoginError::FreeAccount)?
-        .get("credential")
-        .ok_or(LoginError::FreeAccount)?
-        .get("parameters")
-        .ok_or(LoginError::FreeAccount)?;
+    if resp
+        .get("user")
+        .and_then(|v| v.get("credential"))
+        .and_then(|v| v.get("parameters"))
+        .is_none()
+    {
+        return Err(LoginError::FreeAccount);
+    }
     match resp.get("user_auth_token") {
         Some(Value::String(uat)) => Ok(uat.to_string()),
         None | Some(_) => Err(LoginError::NoUserAuthToken),
