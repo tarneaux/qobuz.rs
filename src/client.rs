@@ -328,14 +328,31 @@ async fn do_request<T: DeserializeOwned>(
     path: &str,
     params: &[(&str, &str)],
 ) -> Result<T, reqwest::Error> {
-    client
-        .get(format!("{API_URL}{path}"))
+    let url = format!("{API_URL}{path}");
+    let res = client
+        .get(&url)
         .query(params)
         .send()
         .await?
-        .error_for_status()?
-        .json()
-        .await
+        .error_for_status();
+
+    #[cfg(test)]
+    {
+        #![allow(clippy::unwrap_used)]
+        if res.as_ref().is_err_and(reqwest::Error::is_status) {
+            println!(
+                "Got status error while querying {url}. Querying again to hopefully replicate the error..."
+            );
+            let res = client.get(url).query(params).send().await?;
+            if !res.status().is_success() {
+                println!("Replicating the error failed: the status is a success");
+            }
+            println!("Status code: {}", res.status());
+            println!("Text: {}", res.text().await.unwrap());
+        }
+    }
+
+    res?.json().await
 }
 
 async fn get_user_auth_token(credentials: &QobuzCredentials) -> Result<String, LoginError> {
