@@ -440,32 +440,6 @@ fn make_http_client(app_id: &str, uat: Option<&str>) -> reqwest::Client {
         .expect("Couldn't build reqwest::Client")
 }
 
-pub async fn test_secret(app_id: &str, secret: String) -> Result<bool, ApiError> {
-    if secret.is_empty() {
-        return Ok(false);
-    }
-    let client = Client {
-        reqwest_client: make_http_client(app_id, None),
-        secret,
-    };
-    match client
-        .get_track_file_url("64868958", Quality::HiRes192)
-        .await
-    {
-        Err(ApiError::IsSample) => Ok(true),
-        Err(ApiError::Reqwest(e)) => {
-            if e.is_status() {
-                Ok(false)
-            } else {
-                Err(ApiError::Reqwest(e))
-            }
-        }
-        Err(e) => Err(e),
-        // Since the X-User-Auth-Token header isn't set, we can't get a non-sample URL.
-        Ok(_) => unreachable!(),
-    }
-}
-
 /// Credentials for Qobuz.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QobuzCredentials {
