@@ -9,7 +9,7 @@ use std::{fmt::Display, time::Duration};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Playlist<EF: ExtraFlag> {
+pub struct Playlist<EF: ExtraFlag<Array<Track<WithExtra>>>> {
     pub name: String,
     pub slug: String,
     pub owner: Owner,
@@ -30,7 +30,7 @@ pub struct Playlist<EF: ExtraFlag> {
     pub is_featured: bool,
     pub updated_at: u64,
     pub users_count: u64,
-    pub tracks: EF::Extra<Array<Track<WithExtra>>>,
+    pub tracks: EF::Extra,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -48,7 +48,10 @@ pub struct Array<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Track<EF: ExtraFlag> {
+pub struct Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+{
     pub copyright: String,
     pub displayable: bool,
     pub downloadable: bool,
@@ -73,10 +76,13 @@ pub struct Track<EF: ExtraFlag> {
     pub track_number: u64,
     pub version: Option<String>,
     pub work: Option<String>,
-    pub album: EF::Extra<Album<WithoutExtra>>,
+    pub album: EF::Extra,
 }
 
-impl<EF: ExtraFlag> Display for Track<EF> {
+impl<EF> Display for Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (true, year) = self.release_date_original.year_ce() else {
             panic!("Release year shouldn't be BCE");
@@ -94,7 +100,10 @@ impl<EF: ExtraFlag> Display for Track<EF> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Album<EF: ExtraFlag> {
+pub struct Album<EF>
+where
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+{
     pub artist: Artist<WithoutExtra>,
     pub displayable: bool,
     pub downloadable: bool,
@@ -113,10 +122,13 @@ pub struct Album<EF: ExtraFlag> {
     pub title: String,
     pub upc: String,
     pub version: Option<String>,
-    pub tracks: EF::Extra<Array<Track<WithoutExtra>>>,
+    pub tracks: EF::Extra,
 }
 
-impl<EF: ExtraFlag> Display for Album<EF> {
+impl<EF> Display for Album<EF>
+where
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -129,17 +141,23 @@ impl<EF: ExtraFlag> Display for Album<EF> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Artist<EF: ExtraFlag> {
+pub struct Artist<EF>
+where
+    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
+{
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
     pub name: String,
     pub slug: String,
-    pub tracks: EF::Extra<Array<Track<WithExtra>>>,
-    pub albums: EF::Extra<Array<Album<WithoutExtra>>>,
+    pub tracks: <EF as ExtraFlag<Array<Track<WithExtra>>>>::Extra,
+    pub albums: <EF as ExtraFlag<Array<Album<WithoutExtra>>>>::Extra,
 }
 
-impl<EF: ExtraFlag> Display for Artist<EF> {
+impl<EF> Display for Artist<EF>
+where
+    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -210,7 +228,10 @@ pub trait QobuzType {
     fn name_plural<'b>() -> &'b str;
 }
 
-impl<EF: ExtraFlag> QobuzType for Album<EF> {
+impl<EF> QobuzType for Album<EF>
+where
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+{
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "album"
@@ -220,7 +241,10 @@ impl<EF: ExtraFlag> QobuzType for Album<EF> {
     }
 }
 
-impl<EF: ExtraFlag> QobuzType for Track<EF> {
+impl<EF> QobuzType for Track<EF>
+where
+    EF: ExtraFlag<Album<WithoutExtra>>,
+{
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "track"
@@ -230,7 +254,10 @@ impl<EF: ExtraFlag> QobuzType for Track<EF> {
     }
 }
 
-impl<EF: ExtraFlag> QobuzType for Artist<EF> {
+impl<EF> QobuzType for Artist<EF>
+where
+    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
+{
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "artist"
@@ -240,7 +267,10 @@ impl<EF: ExtraFlag> QobuzType for Artist<EF> {
     }
 }
 
-impl<EF: ExtraFlag> QobuzType for Playlist<EF> {
+impl<EF> QobuzType for Playlist<EF>
+where
+    EF: ExtraFlag<Array<Track<WithExtra>>>,
+{
     type EF = EF;
     fn name_singular<'b>() -> &'b str {
         "playlist"

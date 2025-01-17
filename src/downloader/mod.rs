@@ -68,7 +68,7 @@ impl Downloader {
     ///     .unwrap();
     /// # })
     /// ```
-    pub async fn download_and_tag_track<EF1: ExtraFlag, EF2: ExtraFlag>(
+    pub async fn download_and_tag_track<EF1, EF2>(
         &self,
         track: &Track<EF1>,
         album: &Album<EF2>,
@@ -76,8 +76,10 @@ impl Downloader {
         force: bool,
     ) -> Result<(PathBuf, PathBuf), DownloadError>
     where
-        <EF1 as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
-        <EF2 as ExtraFlag>::Extra<Array<Track<WithoutExtra>>>: Sync,
+        EF1: ExtraFlag<Album<WithoutExtra>>,
+        EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
+        EF1::Extra: Sync,
+        EF2::Extra: Sync,
     {
         let album_path = self.get_standard_album_location(album, true)?;
         let track_path = self
@@ -146,7 +148,7 @@ impl Downloader {
         Ok((album_path, track_paths))
     }
 
-    async fn download_track<EF: ExtraFlag>(
+    async fn download_track<EF>(
         &self,
         track: &Track<EF>,
         album_path: &Path,
@@ -154,7 +156,8 @@ impl Downloader {
         force: bool,
     ) -> Result<PathBuf, DownloadError>
     where
-        <EF as ExtraFlag>::Extra<Album<WithoutExtra>>: Sync,
+        EF: ExtraFlag<Album<WithoutExtra>>,
+        EF::Extra: Sync,
     {
         let track_path = self.get_standard_track_location(track, album_path, &quality);
         let mut out = match OpenOptions::new()
@@ -184,11 +187,14 @@ impl Downloader {
     }
 
     // TODO: configurable path format
-    pub fn get_standard_album_location<E: ExtraFlag>(
+    pub fn get_standard_album_location<EF>(
         &self,
-        album: &Album<E>,
+        album: &Album<EF>,
         ensure_exists: bool,
-    ) -> Result<PathBuf, std::io::Error> {
+    ) -> Result<PathBuf, std::io::Error>
+    where
+        EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+    {
         let mut path = self.root.to_path_buf();
         path.push(format!(
             "{} - {}",
@@ -209,7 +215,7 @@ impl Downloader {
         quality: &Quality,
     ) -> PathBuf
     where
-        EF: ExtraFlag,
+        EF: ExtraFlag<Album<WithoutExtra>>,
     {
         let mut path = album_path.to_path_buf();
         path.push(sanitize_filename(&track.title));

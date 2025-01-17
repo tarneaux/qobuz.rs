@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::fmt::Debug;
 
 use super::{Album, Artist, Playlist, Track};
 
@@ -44,30 +45,43 @@ impl ImplicitExtra for Playlist<WithExtra> {}
 
 // TODO: Upgrade, downgrade methods
 // TODO: Change name ?
-pub trait ExtraFlag {
-    type Extra<T>;
+pub trait ExtraFlag<T> {
+    type Extra: DeserializeOwned + Serialize + Eq + Clone + Debug;
 }
 
 // TODO: Rename, put in enum (enum probably won't work) ?
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WithExtra;
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WithoutExtra;
 
-impl ExtraFlag for WithExtra {
-    type Extra<T> = T;
+impl<T> ExtraFlag<T> for WithExtra
+where
+    T: for<'a> Deserialize<'a> + Serialize + Eq + Clone + Debug,
+{
+    type Extra = T;
 }
-impl ExtraFlag for WithoutExtra {
-    type Extra<T> = Empty;
+impl<T> ExtraFlag<T> for WithoutExtra {
+    type Extra = Empty;
 }
 
-// TODO: Is this the right way to do this ? Is there really no way to use () instead ?
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(from = "Option<()>")] // NOTE: Will error out if the field does exist.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Empty;
 
-impl From<Option<()>> for Empty {
-    fn from(_: Option<()>) -> Self {
-        Self
+impl Serialize for Empty {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_none()
+    }
+}
+
+impl<'de> Deserialize<'de> for Empty {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self)
     }
 }
