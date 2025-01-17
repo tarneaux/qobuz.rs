@@ -1,3 +1,6 @@
+// Erroneous warning that is shown when using the same trait twice with different arguments
+#![allow(clippy::trait_duplication_in_bounds)]
+
 pub mod extra;
 pub mod traits;
 
