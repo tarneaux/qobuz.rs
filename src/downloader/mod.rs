@@ -28,9 +28,9 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// use qobuz::{QobuzCredentials, Client, Downloader};
+    /// use qobuz::{auth::Credentials, Client, downloader::Downloader};
     /// use std::path::Path;
-    /// let credentials = QobuzCredentials::from_env().unwrap();
+    /// let credentials = Credentials::from_env().unwrap();
     /// let client = Client::new(credentials).await.unwrap();
     /// let root = Path::new("music");
     /// let downloader = Downloader::new(client, root);
@@ -51,9 +51,9 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
+    /// # use qobuz::{auth::Credentials, Client, downloader::Downloader, quality::Quality};
     /// # use std::path::Path;
-    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let credentials = Credentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
     /// let downloader = Downloader::new(client.clone(), root);
@@ -100,9 +100,9 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// # use qobuz::{QobuzCredentials, Client, Downloader, quality::Quality};
+    /// # use qobuz::{auth::Credentials, Client, downloader::Downloader, quality::Quality};
     /// # use std::path::Path;
-    /// # let credentials = QobuzCredentials::from_env().unwrap();
+    /// # let credentials = Credentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
     /// # let root = Path::new("music");
     /// # let downloader = Downloader::new(client.clone(), root);

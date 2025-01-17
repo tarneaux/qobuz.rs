@@ -2,23 +2,21 @@
 
 const DIR: &str = "music";
 
+use qobuz::downloader::Downloader;
 use qobuz::types::extra::WithExtra;
-use qobuz::Downloader;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use futures::stream;
 use futures::StreamExt;
+use qobuz::{auth::Credentials, Client};
 use qobuz::{quality::Quality, types::Track};
-use qobuz::{Client, QobuzCredentials};
 use std::io::Write;
 
 #[tokio::main]
 async fn main() {
-    let client = Client::new(QobuzCredentials::from_env().unwrap())
-        .await
-        .unwrap();
+    let client = Client::new(Credentials::from_env().unwrap()).await.unwrap();
     let tracks: Vec<_> = client
         .get_user_favorites::<Track<WithExtra>>()
         .await

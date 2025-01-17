@@ -1,15 +1,14 @@
 #![allow(clippy::unwrap_used)]
 
 use qobuz::{
+    auth::Credentials,
     types::{extra::WithExtra, Track},
-    Client, QobuzCredentials,
+    Client,
 };
 
 #[tokio::main]
 async fn main() {
-    let client = Client::new(QobuzCredentials::from_env().unwrap())
-        .await
-        .unwrap();
+    let client = Client::new(Credentials::from_env().unwrap()).await.unwrap();
 
     let favorites = client
         .get_user_favorites::<Track<WithExtra>>()
