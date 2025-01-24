@@ -25,7 +25,12 @@ async fn main() {
         .filter(|t| t.streamable)
         .collect();
 
-    let downloader = Downloader::new(client.clone(), Path::new(DIR));
+    let downloader = Downloader::new(
+        client.clone(),
+        Path::new(DIR),
+        Path::new(&format!("{DIR}/playlists")),
+    )
+    .unwrap();
 
     let n = tracks.len();
     let v = vec![None; n];

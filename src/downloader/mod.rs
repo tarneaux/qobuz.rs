@@ -2,14 +2,18 @@ use crate::{
     quality::{FileExtension, Quality},
     types::{
         extra::{ExtraFlag, WithExtra, WithoutExtra},
-        Album, Array, Track,
+        Album, Array, Playlist, Track,
     },
     ApiError,
 };
 use futures::{stream, StreamExt};
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
-use tokio::fs::OpenOptions;
+use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
 
@@ -17,11 +21,12 @@ use tagging::{tag_track, TaggingError};
 pub struct Downloader {
     client: crate::Client,
     root: Box<Path>,
+    m3u_dir: Box<Path>,
 }
 
 impl Downloader {
-    /// Create a new `Downloader` which will use the given `Client` to download to the given
-    /// `Path`.
+    /// Create a new `Downloader` which will use the given `client` to download to the given
+    /// `root`, putting m3u playlist files in `m3u_dir`.
     ///
     /// # Example
     ///
@@ -32,16 +37,31 @@ impl Downloader {
     /// use std::path::Path;
     /// let credentials = Credentials::from_env().unwrap();
     /// let client = Client::new(credentials).await.unwrap();
-    /// let root = Path::new("music");
-    /// let downloader = Downloader::new(client, root);
+    /// let downloader = Downloader::new(
+    ///     client,
+    ///     Path::new("music"),
+    ///     Path::new("music/playlists")
+    /// ).unwrap();
     /// # })
     /// ```
-    #[must_use]
-    pub fn new(client: crate::Client, root: &Path) -> Self {
-        Self {
-            client,
-            root: root.into(),
+    pub fn new(
+        client: crate::Client,
+        root: &Path,
+        m3u_dir: &Path,
+    ) -> Result<Self, NonExistentDirectoryError> {
+        let root: Box<Path> = root.into();
+        let m3u_dir: Box<Path> = m3u_dir.into();
+        if !root.is_dir() {
+            return Err(NonExistentDirectoryError::Root(root));
         }
+        if !m3u_dir.is_dir() {
+            return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
+        }
+        Ok(Self {
+            client,
+            root,
+            m3u_dir,
+        })
     }
 
     /// Download and tag a track, returning the download locations of the album and track.
@@ -55,8 +75,11 @@ impl Downloader {
     /// # use std::path::Path;
     /// # let credentials = Credentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// # let root = Path::new("music");
-    /// let downloader = Downloader::new(client.clone(), root);
+    /// let downloader = Downloader::new(
+    ///    client.clone(),
+    ///    Path::new("music"),
+    ///    Path::new("music/playlists")
+    /// ).unwrap();
     /// // Download "Let It Be", replacing the file if it already exists.
     /// let track = client
     ///     .get_track("129342731")
@@ -106,11 +129,14 @@ impl Downloader {
     /// # use std::path::Path;
     /// # let credentials = Credentials::from_env().unwrap();
     /// # let client = Client::new(credentials).await.unwrap();
-    /// # let root = Path::new("music");
-    /// # let downloader = Downloader::new(client.clone(), root);
-    /// // Download "Abbey Road", replacing files if they already exist.
+    /// # let downloader = Downloader::new(
+    /// #    client.clone(),
+    /// #    Path::new("music"),
+    /// #    Path::new("music/playlists")
+    /// # ).unwrap();
+    /// // Download "One Last Time", replacing files if they already exist.
     /// let album = client
-    ///     .get_album("trrcz9pvaaz6b")
+    ///     .get_album("lz75qrx8pnjac")
     ///     .await
     ///     .unwrap();
     /// downloader
@@ -118,6 +144,7 @@ impl Downloader {
     ///     .await
     ///     .unwrap();
     /// # })
+    /// ```
     pub async fn download_and_tag_album(
         &self,
         album: &Album<WithExtra>,
@@ -146,6 +173,97 @@ impl Downloader {
             .collect::<Result<_, DownloadError>>()?;
 
         Ok((album_path, track_paths))
+    }
+
+    /// Download and tag a playlist, creating an m3u file and returning download locations of the
+    /// files.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// # use qobuz::{auth::Credentials, Client, downloader::Downloader, quality::Quality};
+    /// # use std::path::Path;
+    /// # let credentials = Credentials::from_env().unwrap();
+    /// # let client = Client::new(credentials).await.unwrap();
+    /// # let root = Path::new("music");
+    /// # let downloader = Downloader::new(
+    /// #    client.clone(),
+    /// #    Path::new("music"),
+    /// #    Path::new("music/playlists")
+    /// # ).unwrap();
+    /// // Download a playlist, replacing files if they already exist.
+    /// let playlist = client
+    ///     .get_playlist("2197152")
+    ///     .await
+    ///     .unwrap();
+    /// downloader
+    ///     .download_playlist_and_write_m3u(&playlist, Quality::Mp3, true)
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    pub async fn download_playlist_and_write_m3u(
+        &self,
+        playlist: &Playlist<WithExtra>,
+        quality: Quality,
+        force: bool,
+    ) -> Result<(PathBuf, Vec<PathBuf>), DownloadError> {
+        let track_paths = self
+            .download_tracks(&playlist.tracks.items, quality, force)
+            .await?;
+        let m3u_path = self.write_m3u(&playlist.name, &track_paths, force).await?;
+
+        Ok((m3u_path, track_paths))
+    }
+
+    /// Download multiple tracks and return their paths.
+    pub async fn download_tracks(
+        &self,
+        tracks: &[Track<WithExtra>],
+        quality: Quality,
+        force: bool,
+    ) -> Result<Vec<PathBuf>, DownloadError> {
+        let track_paths: Vec<PathBuf> = stream::iter(tracks)
+            .then(|track| {
+                let quality = quality.clone();
+                async move {
+                    let track_path = self
+                        .download_and_tag_track(track, &track.album, quality, force)
+                        .await?
+                        .1;
+                    Ok(track_path)
+                }
+            })
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<_, DownloadError>>()?;
+
+        Ok(track_paths)
+    }
+
+    /// Write an M3U file for a playlist with a certain `name`, containing the already downloaded
+    /// tracks `track_paths`, returning the new M3U file's path.
+    pub async fn write_m3u(
+        &self,
+        name: &str,
+        track_paths: &[PathBuf],
+        force: bool,
+    ) -> Result<PathBuf, std::io::Error> {
+        let m3u_path = self.get_standard_m3u_location(name);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .create_new(!force)
+            .open(&m3u_path)
+            .await?;
+        let track_paths: Vec<&OsStr> = track_paths.iter().map(|p| p.as_os_str()).collect();
+        let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
+        file.write_all(track_paths.as_encoded_bytes()).await?;
+
+        Ok(m3u_path)
     }
 
     async fn download_track<EF>(
@@ -222,6 +340,14 @@ impl Downloader {
         path.set_extension(FileExtension::from(quality).to_string());
         path
     }
+
+    #[must_use]
+    pub fn get_standard_m3u_location(&self, name: &str) -> PathBuf {
+        let mut path = self.m3u_dir.to_path_buf();
+        path.push(sanitize_filename(name));
+        path.set_extension("m3u");
+        path
+    }
 }
 
 #[derive(Debug, Error)]
@@ -234,6 +360,14 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
+}
+
+#[derive(Debug, Error)]
+pub enum NonExistentDirectoryError {
+    #[error("Non existent root download directory `{0}`")]
+    Root(Box<Path>),
+    #[error("Non existent m3u directory `{0}`")]
+    M3uDir(Box<Path>),
 }
 
 #[must_use]
