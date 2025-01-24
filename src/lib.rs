@@ -188,7 +188,7 @@ impl Client {
     /// ```
     pub async fn get_item<T>(&self, id: &str) -> Result<T, ApiError>
     where
-        T: QobuzType + RootEntity + DeserializeOwned,
+        T: QobuzType + RootEntity + DeserializeOwned + Send,
     {
         Ok(self
             .do_request(
@@ -318,7 +318,7 @@ impl Client {
         Ok(self.reqwest_client.get(url).send().await?.bytes_stream())
     }
 
-    async fn do_request<T: DeserializeOwned>(
+    async fn do_request<T: DeserializeOwned + Send>(
         &self,
         path: &str,
         params: &[(&str, &str)],
@@ -327,7 +327,7 @@ impl Client {
     }
 }
 
-async fn do_request<T: DeserializeOwned>(
+async fn do_request<T: DeserializeOwned + Send>(
     client: &reqwest::Client,
     path: &str,
     params: &[(&str, &str)],
@@ -347,7 +347,7 @@ async fn do_request<T: DeserializeOwned>(
             println!(
                 "Got status error while querying {url}. Querying again to hopefully replicate the error..."
             );
-            let res = client.get(url).query(params).send().await?;
+            let res = client.get(url.clone()).query(params).send().await?;
             if res.status().is_success() {
                 println!("Replicating the error failed: the status is a success");
             }
@@ -356,7 +356,25 @@ async fn do_request<T: DeserializeOwned>(
         }
     }
 
-    res?.json().await
+    let json = res?.json().await;
+
+    #[cfg(test)]
+    {
+        #![allow(clippy::unwrap_used)]
+        if json.as_ref().is_err_and(reqwest::Error::is_decode) {
+            println!(
+                "Got decode error while querying {url}. Querying again to hopefully replicate the error..."
+            );
+            let res = client.get(url).query(params).send().await?;
+            if !res.status().is_success() {
+                println!("Replicating the error failed: the status is not a success");
+            }
+            println!("Status code: {}", res.status());
+            println!("Text: {}", res.text().await.unwrap());
+        }
+    }
+
+    json
 }
 
 #[derive(Debug, Error)]
