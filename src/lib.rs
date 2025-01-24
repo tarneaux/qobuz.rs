@@ -348,7 +348,7 @@ async fn do_request<T: DeserializeOwned>(
                 "Got status error while querying {url}. Querying again to hopefully replicate the error..."
             );
             let res = client.get(url).query(params).send().await?;
-            if !res.status().is_success() {
+            if res.status().is_success() {
                 println!("Replicating the error failed: the status is a success");
             }
             println!("Status code: {}", res.status());
