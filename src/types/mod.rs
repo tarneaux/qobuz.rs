@@ -55,7 +55,7 @@ pub struct Track<EF>
 where
     EF: ExtraFlag<Album<WithoutExtra>>,
 {
-    pub copyright: String,
+    pub copyright: Option<String>,
     pub displayable: bool,
     pub downloadable: bool,
     #[serde(with = "ser_duration_u64")]
