@@ -37,7 +37,7 @@ impl TryFrom<u8> for Quality {
 }
 
 #[derive(Debug, Error)]
-#[error("Invalid quality `{0}`")]
+#[error("Invalid quality int `{0}`")]
 pub struct InvalidQualityError(u8);
 
 impl From<Quality> for u8 {
