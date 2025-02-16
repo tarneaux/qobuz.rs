@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::{auth::Credentials, downloader::Downloader, Client};
+use crate::{auth::Credentials, downloader::Downloader, quality::Quality, Client};
 use std::path::Path;
 
 pub async fn make_client() -> Client {
@@ -15,6 +15,13 @@ pub async fn make_client_and_downloader() -> (Client, Downloader) {
     let client = make_client().await;
     (
         client.clone(),
-        Downloader::new(client, Path::new("music"), Path::new("music/playlists")).unwrap(),
+        Downloader::new(
+            client,
+            Path::new("music"),
+            Path::new("music/playlists"),
+            Quality::Cd,
+            true,
+        )
+        .unwrap(),
     )
 }

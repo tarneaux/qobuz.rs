@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use futures::stream;
 use futures::StreamExt;
 use qobuz::{auth::Credentials, Client};
-use qobuz::{quality::Quality, types::Track};
+use qobuz::{downloader::Download, quality::Quality, types::Track};
 use std::io::Write;
 
 #[tokio::main]
@@ -29,6 +29,8 @@ async fn main() {
         client.clone(),
         Path::new(DIR),
         Path::new(&format!("{DIR}/playlists")),
+        Quality::Cd,
+        false,
     )
     .unwrap();
 
@@ -45,10 +47,7 @@ async fn main() {
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
-                let path = downloader
-                    .download_and_tag_track(&t, &t.album, Quality::Cd, false)
-                    .await
-                    .unwrap();
+                let path = t.download_and_tag(&downloader).await.unwrap();
                 *playlist.write().await.get_mut(i).unwrap() =
                     Some(path.1.to_str().unwrap().to_string());
             }
