@@ -167,7 +167,7 @@ impl Downloader {
         path.push(format!(
             "{}.{}",
             sanitize_filename(&self.path_format.get_track_file_basename(track)?,),
-            FileExtension::from(&self.quality).to_string()
+            FileExtension::from(&self.quality)
         ));
         Ok(path)
     }
