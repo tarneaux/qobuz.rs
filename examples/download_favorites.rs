@@ -2,6 +2,7 @@
 
 const DIR: &str = "music";
 
+use qobuz::downloader::path_format::PathFormat;
 use qobuz::downloader::Downloader;
 use qobuz::types::extra::WithExtra;
 use std::path::Path;
@@ -31,6 +32,7 @@ async fn main() {
         Path::new(&format!("{DIR}/playlists")),
         Quality::Cd,
         false,
+        PathFormat::default(),
     )
     .unwrap();
 

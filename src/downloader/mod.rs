@@ -16,6 +16,8 @@ use thiserror::Error;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
+pub mod path_format;
+use path_format::PathFormat;
 
 #[derive(Debug, Clone)]
 pub struct Downloader {
@@ -24,6 +26,7 @@ pub struct Downloader {
     m3u_dir: Box<Path>,
     quality: Quality,
     overwrite: bool,
+    path_format: PathFormat,
 }
 
 impl Downloader {
@@ -52,6 +55,7 @@ impl Downloader {
         m3u_dir: &Path,
         quality: Quality,
         overwrite: bool,
+        path_format: PathFormat,
     ) -> Result<Self, NonExistentDirectoryError> {
         let root: Box<Path> = root.into();
         let m3u_dir: Box<Path> = m3u_dir.into();
@@ -67,6 +71,7 @@ impl Downloader {
             m3u_dir,
             quality,
             overwrite,
+            path_format,
         })
     }
 
@@ -74,15 +79,14 @@ impl Downloader {
     /// tracks `track_paths`, returning the new M3U file's path.
     pub async fn write_m3u(
         &self,
-        name: &str,
+        playlist: &Playlist<WithExtra>,
         track_paths: &[PathBuf],
-    ) -> Result<PathBuf, std::io::Error> {
-        let m3u_path = self.get_standard_m3u_location(name);
+    ) -> Result<PathBuf, DownloadError> {
+        let m3u_path = self.get_m3u_path(playlist)?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .create_new(!self.overwrite)
             .open(&m3u_path)
             .await?;
         let track_paths: Vec<&OsStr> = track_paths
@@ -108,7 +112,7 @@ impl Downloader {
         EF: ExtraFlag<Album<WithoutExtra>>,
         EF::Extra: Sync,
     {
-        let track_path = self.get_standard_track_location(track, album_path);
+        let track_path = self.get_track_path(track, album_path)?;
         let mut out = match OpenOptions::new()
             .write(true)
             .create(true)
@@ -135,44 +139,46 @@ impl Downloader {
         Ok(track_path)
     }
 
-    // TODO: configurable path format
-    pub fn get_standard_album_location<EF>(
+    pub fn get_album_path<EF>(
         &self,
         album: &Album<EF>,
         ensure_exists: bool,
-    ) -> Result<PathBuf, std::io::Error>
+    ) -> Result<PathBuf, DownloadError>
     where
         EF: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
         let mut path = self.root.to_path_buf();
-        path.push(format!(
-            "{} - {}",
-            sanitize_filename(&album.artist.name),
-            sanitize_filename(&album.title),
-        ));
+        path.push(sanitize_filename(&self.path_format.get_album_dir(album)?));
         if ensure_exists && !path.is_dir() {
             std::fs::create_dir_all(&path)?;
         }
         Ok(path)
     }
 
-    #[must_use]
-    pub fn get_standard_track_location<EF>(&self, track: &Track<EF>, album_path: &Path) -> PathBuf
+    pub fn get_track_path<EF>(
+        &self,
+        track: &Track<EF>,
+        album_path: &Path,
+    ) -> Result<PathBuf, tera::Error>
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
     {
         let mut path = album_path.to_path_buf();
-        path.push(sanitize_filename(&track.title));
-        path.set_extension(FileExtension::from(&self.quality).to_string());
-        path
+        path.push(format!(
+            "{}.{}",
+            sanitize_filename(&self.path_format.get_track_file_basename(track)?,),
+            FileExtension::from(&self.quality).to_string()
+        ));
+        Ok(path)
     }
 
-    #[must_use]
-    pub fn get_standard_m3u_location(&self, name: &str) -> PathBuf {
+    pub fn get_m3u_path(&self, playlist: &Playlist<WithExtra>) -> Result<PathBuf, tera::Error> {
         let mut path = self.m3u_dir.to_path_buf();
-        path.push(sanitize_filename(name));
-        path.set_extension("m3u");
-        path
+        path.push(format!(
+            "{}.m3u",
+            sanitize_filename(&self.path_format.get_m3u_file_basename(playlist)?),
+        ));
+        Ok(path)
     }
 }
 
@@ -188,7 +194,7 @@ impl Download for Track<WithExtra> {
     type DRT = (PathBuf, PathBuf);
     /// Download and tag a track, returning the download locations of the album and track.
     async fn download_and_tag(&self, downloader: &Downloader) -> Result<Self::DRT, DownloadError> {
-        let album_path = downloader.get_standard_album_location(&self.album, true)?;
+        let album_path = downloader.get_album_path(&self.album, true)?;
         let track_path = downloader.download_track(self, &album_path).await?;
         let cover_raw = reqwest::get(self.album.image.large.clone())
             .await?
@@ -204,7 +210,7 @@ impl Download for Album<WithExtra> {
     type DRT = (PathBuf, Vec<PathBuf>);
     /// Download and tag an album, returning its root directory and it's tracks paths.
     async fn download_and_tag(&self, downloader: &Downloader) -> Result<Self::DRT, DownloadError> {
-        let album_path = downloader.get_standard_album_location(self, true)?;
+        let album_path = downloader.get_album_path(self, true)?;
         let cover_raw = reqwest::get(self.image.large.clone())
             .await?
             .bytes()
@@ -241,7 +247,7 @@ impl Download for Playlist<WithExtra> {
             .await
             .into_iter()
             .collect::<Result<_, DownloadError>>()?;
-        let m3u_path = downloader.write_m3u(&self.name, &track_paths).await?;
+        let m3u_path = downloader.write_m3u(self, &track_paths).await?;
 
         Ok((m3u_path, track_paths))
     }
@@ -257,6 +263,8 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
+    #[error("Tera error `{0}`")]
+    TeraError(#[from] tera::Error),
 }
 
 #[derive(Debug, Error)]

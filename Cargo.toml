@@ -15,6 +15,7 @@ md5 = "0.7.0"
 reqwest = { version = "0.11.18", features = ["json", "stream"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.100"
+tera = "1.20.0"
 thiserror = "2.0.11"
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-test = "0.4.4"
