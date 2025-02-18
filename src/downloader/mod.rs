@@ -183,17 +183,20 @@ impl Downloader {
 }
 
 pub trait Download: RootEntity {
-    type DRT;
+    type DownloadReturnType;
     fn download_and_tag(
         &self,
         downloader: &Downloader,
-    ) -> impl Future<Output = Result<Self::DRT, DownloadError>>;
+    ) -> impl Future<Output = Result<Self::DownloadReturnType, DownloadError>>;
 }
 
 impl Download for Track<WithExtra> {
-    type DRT = (PathBuf, PathBuf);
+    type DownloadReturnType = (PathBuf, PathBuf);
     /// Download and tag a track, returning the download locations of the album and track.
-    async fn download_and_tag(&self, downloader: &Downloader) -> Result<Self::DRT, DownloadError> {
+    async fn download_and_tag(
+        &self,
+        downloader: &Downloader,
+    ) -> Result<Self::DownloadReturnType, DownloadError> {
         let album_path = downloader.get_album_path(&self.album, true)?;
         let track_path = downloader.download_track(self, &album_path).await?;
         let cover_raw = reqwest::get(self.album.image.large.clone())
@@ -207,9 +210,12 @@ impl Download for Track<WithExtra> {
 }
 
 impl Download for Album<WithExtra> {
-    type DRT = (PathBuf, Vec<PathBuf>);
+    type DownloadReturnType = (PathBuf, Vec<PathBuf>);
     /// Download and tag an album, returning its root directory and it's tracks paths.
-    async fn download_and_tag(&self, downloader: &Downloader) -> Result<Self::DRT, DownloadError> {
+    async fn download_and_tag(
+        &self,
+        downloader: &Downloader,
+    ) -> Result<Self::DownloadReturnType, DownloadError> {
         let album_path = downloader.get_album_path(self, true)?;
         let cover_raw = reqwest::get(self.image.large.clone())
             .await?
@@ -234,10 +240,13 @@ impl Download for Album<WithExtra> {
 }
 
 impl Download for Playlist<WithExtra> {
-    type DRT = (PathBuf, Vec<PathBuf>);
+    type DownloadReturnType = (PathBuf, Vec<PathBuf>);
     /// Download and tag a playlist, creating an m3u file and returning download locations of the
     /// files.
-    async fn download_and_tag(&self, downloader: &Downloader) -> Result<Self::DRT, DownloadError> {
+    async fn download_and_tag(
+        &self,
+        downloader: &Downloader,
+    ) -> Result<Self::DownloadReturnType, DownloadError> {
         let track_paths: Vec<PathBuf> = futures::stream::iter(&self.tracks.items)
             .then(|track| async move {
                 let track_path = track.download_and_tag(downloader).await?.1;
