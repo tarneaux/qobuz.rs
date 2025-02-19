@@ -206,13 +206,13 @@ pub trait Download: RootEntity {
     ) -> Result<
         (
             impl Future<Output = Result<(), DownloadError>>,
-            DownloadReturned<Self::ProgressType>,
+            DownloadInfo<Self::ProgressType>,
         ),
         Self::E,
     >;
 }
 
-pub struct DownloadReturned<ProgressType> {
+pub struct DownloadInfo<ProgressType> {
     pub path: PathBuf,
     pub progress_rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
 }
@@ -242,7 +242,7 @@ impl Download for Track<WithExtra> {
     ) -> Result<
         (
             impl Future<Output = Result<(), DownloadError>>,
-            DownloadReturned<Self::ProgressType>,
+            DownloadInfo<Self::ProgressType>,
         ),
         Self::E,
     > {
@@ -263,7 +263,7 @@ impl Download for Track<WithExtra> {
 
         Ok((
             fut,
-            DownloadReturned {
+            DownloadInfo {
                 path,
                 progress_rx: oneshot_rx,
             },
@@ -281,7 +281,7 @@ impl Download for Album<WithExtra> {
     ) -> Result<
         (
             impl Future<Output = Result<(), DownloadError>>,
-            DownloadReturned<Self::ProgressType>,
+            DownloadInfo<Self::ProgressType>,
         ),
         Self::E,
     > {
@@ -333,7 +333,7 @@ impl Download for Album<WithExtra> {
         let path = downloader.get_album_path(self, true)?;
         Ok((
             fut,
-            DownloadReturned {
+            DownloadInfo {
                 path,
                 progress_rx: oneshot_rx,
             },
@@ -352,7 +352,7 @@ impl Download for Playlist<WithExtra> {
     ) -> Result<
         (
             impl Future<Output = Result<(), DownloadError>>,
-            DownloadReturned<Self::ProgressType>,
+            DownloadInfo<Self::ProgressType>,
         ),
         Self::E,
     > {
@@ -406,7 +406,7 @@ impl Download for Playlist<WithExtra> {
         let path = downloader.write_m3u(self, &track_paths)?;
         Ok((
             fut,
-            DownloadReturned {
+            DownloadInfo {
                 path,
                 progress_rx: oneshot_rx,
             },
