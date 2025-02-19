@@ -214,7 +214,7 @@ pub trait Download: RootEntity {
 
 pub struct DownloadReturned<ProgressType> {
     pub path: PathBuf,
-    pub rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
+    pub progress_rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
 }
 
 #[derive(Debug, Clone)]
@@ -265,7 +265,7 @@ impl Download for Track<WithExtra> {
             fut,
             DownloadReturned {
                 path,
-                rx: oneshot_rx,
+                progress_rx: oneshot_rx,
             },
         ))
     }
@@ -335,7 +335,7 @@ impl Download for Album<WithExtra> {
             fut,
             DownloadReturned {
                 path,
-                rx: oneshot_rx,
+                progress_rx: oneshot_rx,
             },
         ))
     }
@@ -408,7 +408,7 @@ impl Download for Playlist<WithExtra> {
             fut,
             DownloadReturned {
                 path,
-                rx: oneshot_rx,
+                progress_rx: oneshot_rx,
             },
         ))
     }
@@ -459,7 +459,7 @@ mod tests {
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
         let (fut, res) = track.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.rx.await.unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
     }
 
@@ -476,7 +476,7 @@ mod tests {
             .unwrap();
         let (fut, res) = album.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.rx.await.unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
     }
 }
