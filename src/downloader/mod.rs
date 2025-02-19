@@ -16,7 +16,10 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tokio::{fs::OpenOptions, sync::watch};
+use tokio::{
+    fs::OpenOptions,
+    sync::{oneshot, watch},
+};
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
 pub mod path_format;
@@ -109,7 +112,7 @@ impl Downloader {
         &self,
         track: &Track<EF>,
         path: &Path,
-        tx: watch::Sender<Option<TrackDownloadProgress>>,
+        oneshot_tx: oneshot::Sender<watch::Receiver<TrackDownloadProgress>>,
     ) -> Result<(), DownloadError>
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
@@ -137,14 +140,19 @@ impl Downloader {
             .stream_track(&track.id.to_string(), self.quality.clone())
             .await?;
         let mut downloaded: u64 = 0;
+        let (tx, rx) = watch::channel(TrackDownloadProgress {
+            downloaded,
+            total: content_length,
+        });
+        let _ = oneshot_tx.send(rx);
         while let Some(item) = bytes_stream.next().await {
             let item = item?;
             tokio::io::copy(&mut item.as_ref(), &mut out).await?;
             downloaded += item.len() as u64;
-            tx.send_replace(Some(TrackDownloadProgress {
+            tx.send_replace(TrackDownloadProgress {
                 downloaded,
                 total: content_length,
-            }));
+            });
         }
         Ok(())
     }
@@ -211,7 +219,7 @@ pub trait Download: RootEntity {
 #[must_use]
 pub struct DownloadReturned<ProgressType> {
     pub path: PathBuf,
-    pub rx: watch::Receiver<Option<ProgressType>>,
+    pub rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
 }
 
 #[derive(Debug, Clone)]
@@ -246,19 +254,25 @@ impl Download for Track<WithExtra> {
         let album_path = downloader.get_album_path(&self.album, true)?;
         let path = downloader.get_track_path(self, &album_path)?;
 
-        let (tx, rx) = watch::channel(None);
+        let (oneshot_tx, oneshot_rx) = oneshot::channel();
 
         let fut = {
             let path = path.clone();
             async move {
-                downloader.download_track(self, &path, tx).await?;
+                downloader.download_track(self, &path, oneshot_tx).await?;
                 tag_track(self, &path, &self.album).await?;
 
                 Ok(())
             }
         };
 
-        Ok((fut, DownloadReturned { path, rx }))
+        Ok((
+            fut,
+            DownloadReturned {
+                path,
+                rx: oneshot_rx,
+            },
+        ))
     }
 }
 
@@ -278,26 +292,57 @@ impl Download for Album<WithExtra> {
     > {
         let tracks = &self.tracks.items;
 
-        let (tx, rx) = watch::channel(None);
+        let (oneshot_tx, oneshot_rx) = oneshot::channel();
 
         let fut = async move {
-            for (i, track) in tracks.iter().enumerate() {
+            let mut iterator = tracks.iter().enumerate();
+
+            let Some((i, first_track)) = iterator.next() else {
+                // TODO: Is this the right way to handle this ?
+                return Ok(());
+            };
+
+            // TODO: Make Track<WithExtra> without the redundant API query
+            let track = downloader
+                .client
+                .get_track(&first_track.id.to_string())
+                .await?;
+            let (fut, res) = track.download(downloader)?;
+            let (tx, rx) = watch::channel(ArrayDownloadProgress {
+                current: track.clone(), // TODO: Avoid cloning track
+                position: i,
+                total: tracks.len(),
+                track_path: res.path,
+            });
+            let _ = oneshot_tx.send(rx);
+
+            fut.await?;
+
+            for (i, track) in iterator {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = downloader.client.get_track(&track.id.to_string()).await?;
                 let (fut, res) = track.download(downloader)?;
-                tx.send_replace(Some(ArrayDownloadProgress {
+
+                tx.send_replace(ArrayDownloadProgress {
                     current: track.clone(), // TODO: Avoid cloning track
                     position: i,
                     total: tracks.len(),
                     track_path: res.path,
-                }));
+                });
+
                 fut.await?;
             }
             Ok(())
         };
 
         let path = downloader.get_album_path(self, true)?;
-        Ok((fut, DownloadReturned { path, rx }))
+        Ok((
+            fut,
+            DownloadReturned {
+                path,
+                rx: oneshot_rx,
+            },
+        ))
     }
 }
 
@@ -318,17 +363,39 @@ impl Download for Playlist<WithExtra> {
     > {
         let tracks = &self.tracks.items;
 
-        let (tx, rx) = watch::channel(None);
+        let (oneshot_tx, oneshot_rx) = oneshot::channel();
 
         let fut = async move {
-            for (i, track) in tracks.iter().enumerate() {
+            let mut iterator = tracks.iter().enumerate();
+
+            let Some((i, first_track)) = iterator.next() else {
+                // TODO: Is this the right way to handle this ?
+                return Ok(());
+            };
+
+            let (fut, res) = first_track.download(downloader)?;
+            let (tx, rx) = watch::channel(ArrayDownloadProgress {
+                current: first_track.clone(), // TODO: Avoid cloning track
+                position: i,
+                total: tracks.len(),
+                track_path: res.path,
+            });
+            let _ = oneshot_tx.send(rx);
+
+            fut.await?;
+
+            for (i, track) in iterator {
+                // TODO: Make Track<WithExtra> without the redundant API query
+                let track = downloader.client.get_track(&track.id.to_string()).await?;
                 let (fut, res) = track.download(downloader)?;
-                tx.send_replace(Some(ArrayDownloadProgress {
+
+                tx.send_replace(ArrayDownloadProgress {
                     current: track.clone(), // TODO: Avoid cloning track
                     position: i,
                     total: tracks.len(),
                     track_path: res.path,
-                }));
+                });
+
                 fut.await?;
             }
             Ok(())
@@ -342,7 +409,13 @@ impl Download for Playlist<WithExtra> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let path = downloader.write_m3u(self, &track_paths)?;
-        Ok((fut, DownloadReturned { path, rx }))
+        Ok((
+            fut,
+            DownloadReturned {
+                path,
+                rx: oneshot_rx,
+            },
+        ))
     }
 }
 
@@ -389,7 +462,7 @@ mod tests {
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
         let (fut, res) = track.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.rx.borrow().clone().unwrap();
+        let final_progress = res.rx.await.unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
     }
 
@@ -406,7 +479,7 @@ mod tests {
             .unwrap();
         let (fut, res) = album.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.rx.borrow().clone().unwrap();
+        let final_progress = res.rx.await.unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
     }
 }

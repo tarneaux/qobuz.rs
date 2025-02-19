@@ -52,11 +52,11 @@ async fn main() {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
                 let (fut, res) = t.download(&downloader).unwrap();
-                let mut rx = res.rx;
                 tokio::spawn(async move {
+                    let mut rx = res.rx.await.unwrap();
                     while rx.changed().await.is_ok() {
                         let percent = {
-                            let progress = rx.borrow().clone().unwrap();
+                            let progress = rx.borrow();
                             (progress.downloaded * 100) / progress.total
                         };
                         print!("{percent}%\r");
