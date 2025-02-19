@@ -94,14 +94,10 @@ impl Downloader {
             .create(true)
             .truncate(true)
             .open(&m3u_path)?;
-        let track_paths: Vec<&OsStr> = track_paths
+        let track_paths = track_paths
             .iter()
-            .map(|p| {
-                p.strip_prefix(&self.root)
-                    .expect("Path should be relative to music directory")
-                    .as_os_str()
-            })
-            .collect();
+            .map(|p| Ok(p.strip_prefix(&self.root)?.as_os_str()))
+            .collect::<Result<Vec<&OsStr>, std::path::StripPrefixError>>()?;
         let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
         file.write_all(track_paths.as_encoded_bytes())?;
 
@@ -430,6 +426,8 @@ pub enum DownloadError {
     ApiError(#[from] ApiError),
     #[error("Tera error `{0}`")]
     TeraError(#[from] tera::Error),
+    #[error("Failed to strip prefix from path: `{0}`")]
+    PathStripPrefixError(#[from] std::path::StripPrefixError),
 }
 
 #[derive(Debug, Error)]
