@@ -7,16 +7,21 @@ use id3::frame::Timestamp;
 use std::path::Path;
 use thiserror::Error;
 
-pub fn tag_track<EF1, EF2>(
+pub async fn tag_track<EF1, EF2>(
     track: &Track<EF1>,
     path: &Path,
     album: &Album<EF2>,
-    album_cover: audiotags::Picture,
 ) -> Result<(), TaggingError>
 where
     EF1: ExtraFlag<Album<WithoutExtra>>,
     EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
 {
+    let cover_raw = reqwest::get(album.image.large.clone())
+        .await?
+        .bytes()
+        .await?;
+    let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
+
     let mut tag = match audiotags::Tag::new().read_from_path(path) {
         Ok(v) => v,
         Err(e) => match e {
@@ -36,7 +41,7 @@ where
     tag.set_album(audiotags::Album {
         title: &album.title,
         artist: Some(&album.artist.name),
-        cover: Some(album_cover),
+        cover: Some(cover),
     });
     tag.set_disc((
         track.media_number.try_into()?,
@@ -69,4 +74,6 @@ pub enum TaggingError {
     AudioTags(#[from] audiotags::Error),
     #[error("IO error `{0}`")]
     IoError(#[from] std::io::Error),
+    #[error("Reqwest error: `{0}`")]
+    ReqwestError(#[from] reqwest::Error),
 }

@@ -2,18 +2,20 @@
 
 const DIR: &str = "music";
 
-use qobuz::downloader::path_format::PathFormat;
-use qobuz::downloader::Downloader;
-use qobuz::types::extra::WithExtra;
-use std::path::Path;
-use std::sync::Arc;
+use futures::{stream, StreamExt};
+use qobuz::{
+    auth::Credentials,
+    downloader::{path_format::PathFormat, Download, Downloader},
+    quality::Quality,
+    types::{extra::WithExtra, Track},
+    Client,
+};
+use std::{
+    io::{self, Write},
+    path::Path,
+    sync::Arc,
+};
 use tokio::sync::RwLock;
-
-use futures::stream;
-use futures::StreamExt;
-use qobuz::{auth::Credentials, Client};
-use qobuz::{downloader::Download, quality::Quality, types::Track};
-use std::io::Write;
 
 #[tokio::main]
 async fn main() {
@@ -49,9 +51,21 @@ async fn main() {
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
-                let path = t.download_and_tag(&downloader).await.unwrap();
+                let (fut, res) = t.download(&downloader).unwrap();
+                let mut rx = res.rx;
+                tokio::spawn(async move {
+                    while rx.changed().await.is_ok() {
+                        let percent = {
+                            let progress = rx.borrow().clone().unwrap();
+                            (progress.downloaded * 100) / progress.total
+                        };
+                        print!("{percent}%\r");
+                        io::stdout().flush().unwrap();
+                    }
+                });
+                fut.await.unwrap();
                 *playlist.write().await.get_mut(i).unwrap() =
-                    Some(path.1.to_str().unwrap().to_string());
+                    Some(res.path.to_str().unwrap().to_string());
             }
         })
         .await;

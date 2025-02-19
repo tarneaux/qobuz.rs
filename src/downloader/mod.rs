@@ -8,12 +8,15 @@ use crate::{
 };
 use futures::{Future, StreamExt};
 use std::{
+    error::Error,
     ffi::OsStr,
+    fmt::Debug,
+    io::Write,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tokio::{fs::OpenOptions, io::AsyncWriteExt};
+use tokio::{fs::OpenOptions, sync::watch};
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
 pub mod path_format;
@@ -77,18 +80,17 @@ impl Downloader {
 
     /// Write an M3U file for a playlist with a certain `name`, containing the already downloaded
     /// tracks `track_paths`, returning the new M3U file's path.
-    pub async fn write_m3u(
+    pub fn write_m3u(
         &self,
         playlist: &Playlist<WithExtra>,
         track_paths: &[PathBuf],
     ) -> Result<PathBuf, DownloadError> {
         let m3u_path = self.get_m3u_path(playlist)?;
-        let mut file = OpenOptions::new()
+        let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&m3u_path)
-            .await?;
+            .open(&m3u_path)?;
         let track_paths: Vec<&OsStr> = track_paths
             .iter()
             .map(|p| {
@@ -98,7 +100,7 @@ impl Downloader {
             })
             .collect();
         let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
-        file.write_all(track_paths.as_encoded_bytes()).await?;
+        file.write_all(track_paths.as_encoded_bytes())?;
 
         Ok(m3u_path)
     }
@@ -106,44 +108,51 @@ impl Downloader {
     async fn download_track<EF>(
         &self,
         track: &Track<EF>,
-        album_path: &Path,
-    ) -> Result<PathBuf, DownloadError>
+        path: &Path,
+        tx: watch::Sender<Option<TrackDownloadProgress>>,
+    ) -> Result<(), DownloadError>
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
-        EF::Extra: Sync,
     {
-        let track_path = self.get_track_path(track, album_path)?;
         let mut out = match OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .create_new(!self.overwrite) // (Shadows create and truncate)
-            .open(&track_path)
-            .await
+            .open(&path)
+            .await // TODO: Is async better than sync (isn't sync faster ?)
         {
             Ok(v) => v,
             Err(e) => {
                 return match e.kind() {
-                    std::io::ErrorKind::AlreadyExists => Ok(track_path),
+                    // TODO: Remove when using temp files
+                    std::io::ErrorKind::AlreadyExists => Ok(()),
                     _ => Err(DownloadError::IoError(e)),
-                }
+                };
             }
         };
-        let mut bytes_stream = self
+        let (mut bytes_stream, content_length) = self
             .client
             .stream_track(&track.id.to_string(), self.quality.clone())
             .await?;
+        let mut downloaded: u64 = 0;
         while let Some(item) = bytes_stream.next().await {
-            tokio::io::copy(&mut item?.as_ref(), &mut out).await?;
+            let item = item?;
+            tokio::io::copy(&mut item.as_ref(), &mut out).await?;
+            downloaded += item.len() as u64;
+            tx.send_replace(Some(TrackDownloadProgress {
+                downloaded,
+                total: content_length,
+            }));
         }
-        Ok(track_path)
+        Ok(())
     }
 
     pub fn get_album_path<EF>(
         &self,
         album: &Album<EF>,
         ensure_exists: bool,
-    ) -> Result<PathBuf, DownloadError>
+    ) -> Result<PathBuf, tera::Error>
     where
         EF: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
@@ -183,82 +192,156 @@ impl Downloader {
 }
 
 pub trait Download: RootEntity {
-    type DownloadReturnType;
-    fn download_and_tag(
+    type ProgressType: Debug + Clone;
+    type E: Error;
+
+    fn download(
         &self,
         downloader: &Downloader,
-    ) -> impl Future<Output = Result<Self::DownloadReturnType, DownloadError>>;
+    ) -> Result<
+        (
+            impl Future<Output = Result<(), DownloadError>>,
+            DownloadReturned<Self::ProgressType>,
+        ),
+        Self::E,
+    >;
+}
+
+#[must_use]
+pub struct DownloadReturned<ProgressType> {
+    pub path: PathBuf,
+    pub rx: watch::Receiver<Option<ProgressType>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackDownloadProgress {
+    pub downloaded: u64,
+    pub total: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayDownloadProgress {
+    pub current: Track<WithExtra>,
+    pub position: usize,
+    pub total: usize,
+    pub track_path: PathBuf,
 }
 
 impl Download for Track<WithExtra> {
-    type DownloadReturnType = (PathBuf, PathBuf);
+    type ProgressType = TrackDownloadProgress;
+    type E = tera::Error;
+
     /// Download and tag a track, returning the download locations of the album and track.
-    async fn download_and_tag(
+    fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<Self::DownloadReturnType, DownloadError> {
+    ) -> Result<
+        (
+            impl Future<Output = Result<(), DownloadError>>,
+            DownloadReturned<Self::ProgressType>,
+        ),
+        Self::E,
+    > {
         let album_path = downloader.get_album_path(&self.album, true)?;
-        let track_path = downloader.download_track(self, &album_path).await?;
-        let cover_raw = reqwest::get(self.album.image.large.clone())
-            .await?
-            .bytes()
-            .await?;
-        let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        tag_track(self, &track_path, &self.album, cover)?;
-        Ok((album_path, track_path))
+        let path = downloader.get_track_path(self, &album_path)?;
+
+        let (tx, rx) = watch::channel(None);
+
+        let fut = {
+            let path = path.clone();
+            async move {
+                downloader.download_track(self, &path, tx).await?;
+                tag_track(self, &path, &self.album).await?;
+
+                Ok(())
+            }
+        };
+
+        Ok((fut, DownloadReturned { path, rx }))
     }
 }
 
 impl Download for Album<WithExtra> {
-    type DownloadReturnType = (PathBuf, Vec<PathBuf>);
-    /// Download and tag an album, returning its root directory and it's tracks paths.
-    async fn download_and_tag(
+    type ProgressType = ArrayDownloadProgress;
+    type E = tera::Error;
+
+    fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<Self::DownloadReturnType, DownloadError> {
-        let album_path = downloader.get_album_path(self, true)?;
-        let cover_raw = reqwest::get(self.image.large.clone())
-            .await?
-            .bytes()
-            .await?;
-        let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
-        let items = &self.tracks.items;
+    ) -> Result<
+        (
+            impl Future<Output = Result<(), DownloadError>>,
+            DownloadReturned<Self::ProgressType>,
+        ),
+        Self::E,
+    > {
+        let tracks = &self.tracks.items;
 
-        let track_paths: Vec<PathBuf> = futures::stream::iter(items)
-            .then(|track| async {
-                let track_path = downloader.download_track(track, &album_path).await?;
-                tag_track(track, &track_path, self, cover.clone())?;
-                Ok(track_path)
-            })
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<Result<_, DownloadError>>()?;
+        let (tx, rx) = watch::channel(None);
 
-        Ok((album_path, track_paths))
+        let fut = async move {
+            for (i, track) in tracks.iter().enumerate() {
+                // TODO: Make Track<WithExtra> without the redundant API query
+                let track = downloader.client.get_track(&track.id.to_string()).await?;
+                let (fut, res) = track.download(downloader)?;
+                tx.send_replace(Some(ArrayDownloadProgress {
+                    current: track.clone(), // TODO: Avoid cloning track
+                    position: i,
+                    total: tracks.len(),
+                    track_path: res.path,
+                }));
+                fut.await?;
+            }
+            Ok(())
+        };
+
+        let path = downloader.get_album_path(self, true)?;
+        Ok((fut, DownloadReturned { path, rx }))
     }
 }
 
+// TODO: Deduplicate implementations
 impl Download for Playlist<WithExtra> {
-    type DownloadReturnType = (PathBuf, Vec<PathBuf>);
-    /// Download and tag a playlist, creating an m3u file and returning download locations of the
-    /// files.
-    async fn download_and_tag(
+    type ProgressType = ArrayDownloadProgress;
+    type E = DownloadError;
+
+    fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<Self::DownloadReturnType, DownloadError> {
-        let track_paths: Vec<PathBuf> = futures::stream::iter(&self.tracks.items)
-            .then(|track| async move {
-                let track_path = track.download_and_tag(downloader).await?.1;
-                Ok(track_path)
-            })
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<Result<_, DownloadError>>()?;
-        let m3u_path = downloader.write_m3u(self, &track_paths).await?;
+    ) -> Result<
+        (
+            impl Future<Output = Result<(), DownloadError>>,
+            DownloadReturned<Self::ProgressType>,
+        ),
+        Self::E,
+    > {
+        let tracks = &self.tracks.items;
 
-        Ok((m3u_path, track_paths))
+        let (tx, rx) = watch::channel(None);
+
+        let fut = async move {
+            for (i, track) in tracks.iter().enumerate() {
+                let (fut, res) = track.download(downloader)?;
+                tx.send_replace(Some(ArrayDownloadProgress {
+                    current: track.clone(), // TODO: Avoid cloning track
+                    position: i,
+                    total: tracks.len(),
+                    track_path: res.path,
+                }));
+                fut.await?;
+            }
+            Ok(())
+        };
+
+        let track_paths: Vec<_> = tracks
+            .iter()
+            .map(|t| {
+                let album_path = downloader.get_album_path(&t.album, true).unwrap();
+                downloader.get_track_path(t, &album_path).unwrap()
+            })
+            .collect();
+        let path = downloader.write_m3u(self, &track_paths)?;
+        Ok((fut, DownloadReturned { path, rx }))
     }
 }
 
@@ -300,14 +383,17 @@ mod tests {
     const HIRES192_TRACK: &str = "18893849"; // Creedence Clearwater Revival - Lodi
 
     #[test]
-    async fn test_download_and_tag_track() {
+    async fn test_download_track() {
         let (client, downloader) = make_client_and_downloader().await;
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
-        track.download_and_tag(&downloader).await.unwrap();
+        let (fut, res) = track.download(&downloader).unwrap();
+        fut.await.unwrap();
+        let final_progress = res.rx.borrow().clone().unwrap();
+        assert!(final_progress.downloaded == final_progress.total);
     }
 
     #[test]
-    async fn test_download_and_tag_album() {
+    async fn test_download_album() {
         let (client, downloader) = make_client_and_downloader().await;
         let album = client
             .get_album("lz75qrx8pnjac")
@@ -317,6 +403,9 @@ mod tests {
                 e
             })
             .unwrap();
-        album.download_and_tag(&downloader).await.unwrap();
+        let (fut, res) = album.download(&downloader).unwrap();
+        fut.await.unwrap();
+        let final_progress = res.rx.borrow().clone().unwrap();
+        assert!(final_progress.position == final_progress.total - 1);
     }
 }

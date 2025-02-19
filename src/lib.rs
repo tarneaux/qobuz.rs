@@ -298,6 +298,7 @@ impl Client {
     /// let mut bytes_stream = client
     ///     .stream_track("129342731", Quality::HiRes96)
     ///     .await
+    ///     .0
     ///     .unwrap();
     /// let mut out = File::create("let_it_be.mp3")
     ///     .await
@@ -313,9 +314,11 @@ impl Client {
         &self,
         track_id: &str,
         quality: Quality,
-    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, ApiError> {
+    ) -> Result<(impl Stream<Item = reqwest::Result<Bytes>>, u64), ApiError> {
         let url = self.get_track_file_url(track_id, quality).await?;
-        Ok(self.reqwest_client.get(url).send().await?.bytes_stream())
+        let res = self.reqwest_client.get(url).send().await?;
+        let content_length = res.content_length().ok_or(ApiError::NoContentLength)?;
+        Ok((res.bytes_stream(), content_length))
     }
 
     async fn do_request<T: DeserializeOwned + Send>(
@@ -381,6 +384,8 @@ async fn do_request<T: DeserializeOwned + Send>(
 pub enum ApiError {
     #[error("downloadable file is a sample")]
     IsSample,
+    #[error("No content length returned for track stream")]
+    NoContentLength,
     #[error("couldn't get key `{0}`")]
     MissingKey(String),
     #[error("serde_json error `{0}`")]
@@ -481,7 +486,7 @@ mod tests {
     #[test]
     async fn test_stream_track() {
         use futures::StreamExt;
-        let mut stream = make_client()
+        let (mut stream, _cl) = make_client()
             .await
             .stream_track("64868955", Quality::HiRes96)
             .await
