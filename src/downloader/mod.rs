@@ -216,7 +216,6 @@ pub trait Download: RootEntity {
     >;
 }
 
-#[must_use]
 pub struct DownloadReturned<ProgressType> {
     pub path: PathBuf,
     pub rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
