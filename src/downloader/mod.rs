@@ -113,6 +113,7 @@ impl Downloader {
     ) -> Result<(), DownloadError>
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
+        for<'a> &'a Track<EF>: Send,
     {
         let mut out = match OpenOptions::new()
             .write(true)

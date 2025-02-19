@@ -15,6 +15,8 @@ pub async fn tag_track<EF1, EF2>(
 where
     EF1: ExtraFlag<Album<WithoutExtra>>,
     EF2: ExtraFlag<Array<Track<WithoutExtra>>>,
+    for<'a> &'a Track<EF1>: Send,
+    for<'a> &'a Album<EF2>: Send,
 {
     let cover_raw = reqwest::get(album.image.large.clone())
         .await?
