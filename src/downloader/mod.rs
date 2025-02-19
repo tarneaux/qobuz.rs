@@ -333,13 +333,13 @@ impl Download for Playlist<WithExtra> {
             Ok(())
         };
 
-        let track_paths: Vec<_> = tracks
+        let track_paths = tracks
             .iter()
-            .map(|t| {
-                let album_path = downloader.get_album_path(&t.album, true).unwrap();
-                downloader.get_track_path(t, &album_path).unwrap()
+            .map(|t| -> Result<PathBuf, tera::Error> {
+                let album_path = downloader.get_album_path(&t.album, true)?;
+                downloader.get_track_path(t, &album_path)
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         let path = downloader.write_m3u(self, &track_paths)?;
         Ok((fut, DownloadReturned { path, rx }))
     }
