@@ -18,12 +18,14 @@ use std::{
 use thiserror::Error;
 use tokio::{
     fs::OpenOptions,
-    sync::{oneshot, watch},
+    sync::{mpsc, oneshot, watch},
 };
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
 pub mod path_format;
 use path_format::PathFormat;
+
+mod delayed_watch;
 
 #[derive(Debug, Clone)]
 pub struct Downloader {
@@ -108,7 +110,7 @@ impl Downloader {
         &self,
         track: &Track<EF>,
         path: &Path,
-        oneshot_tx: oneshot::Sender<watch::Receiver<TrackDownloadProgress>>,
+        progress_tx: mpsc::Sender<TrackDownloadProgress>,
     ) -> Result<(), DownloadError>
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
@@ -136,19 +138,17 @@ impl Downloader {
             .stream_track(&track.id.to_string(), self.quality.clone())
             .await?;
         let mut downloaded: u64 = 0;
-        let (tx, rx) = watch::channel(TrackDownloadProgress {
-            downloaded,
-            total: content_length,
-        });
-        let _ = oneshot_tx.send(rx);
         while let Some(item) = bytes_stream.next().await {
             let item = item?;
             tokio::io::copy(&mut item.as_ref(), &mut out).await?;
             downloaded += item.len() as u64;
-            tx.send_replace(TrackDownloadProgress {
-                downloaded,
-                total: content_length,
-            });
+            progress_tx
+                .send(TrackDownloadProgress {
+                    downloaded,
+                    total: content_length,
+                })
+                .await
+                .expect("The mpsc will never be closed on the receiving side");
         }
         Ok(())
     }
@@ -214,7 +214,7 @@ pub trait Download: RootEntity {
 
 pub struct DownloadInfo<ProgressType> {
     pub path: PathBuf,
-    pub progress_rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
+    pub progress_rx: oneshot::Receiver<Option<watch::Receiver<ProgressType>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -249,25 +249,19 @@ impl Download for Track<WithExtra> {
         let album_path = downloader.get_album_path(&self.album, true)?;
         let path = downloader.get_track_path(self, &album_path)?;
 
-        let (oneshot_tx, oneshot_rx) = oneshot::channel();
+        let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = {
             let path = path.clone();
             async move {
-                downloader.download_track(self, &path, oneshot_tx).await?;
+                downloader.download_track(self, &path, progress_tx).await?;
                 tag_track(self, &path, &self.album).await?;
 
                 Ok(())
             }
         };
 
-        Ok((
-            fut,
-            DownloadInfo {
-                path,
-                progress_rx: oneshot_rx,
-            },
-        ))
+        Ok((fut, DownloadInfo { path, progress_rx }))
     }
 }
 
@@ -287,43 +281,23 @@ impl Download for Album<WithExtra> {
     > {
         let tracks = &self.tracks.items;
 
-        let (oneshot_tx, oneshot_rx) = oneshot::channel();
+        let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
-            let mut iterator = tracks.iter().enumerate();
-
-            let Some((i, first_track)) = iterator.next() else {
-                // TODO: Is this the right way to handle this ?
-                return Ok(());
-            };
-
-            // TODO: Make Track<WithExtra> without the redundant API query
-            let track = downloader
-                .client
-                .get_track(&first_track.id.to_string())
-                .await?;
-            let (fut, res) = track.download(downloader)?;
-            let (tx, rx) = watch::channel(ArrayDownloadProgress {
-                current: track.clone(), // TODO: Avoid cloning track
-                position: i,
-                total: tracks.len(),
-                track_path: res.path,
-            });
-            let _ = oneshot_tx.send(rx);
-
-            fut.await?;
-
-            for (i, track) in iterator {
+            for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = downloader.client.get_track(&track.id.to_string()).await?;
                 let (fut, res) = track.download(downloader)?;
 
-                tx.send_replace(ArrayDownloadProgress {
-                    current: track.clone(), // TODO: Avoid cloning track
-                    position: i,
-                    total: tracks.len(),
-                    track_path: res.path,
-                });
+                progress_tx
+                    .send(ArrayDownloadProgress {
+                        current: track.clone(), // TODO: Avoid cloning track
+                        position: i,
+                        total: tracks.len(),
+                        track_path: res.path,
+                    })
+                    .await
+                    .expect("The mpsc will never be closed on the receiving side");
 
                 fut.await?;
             }
@@ -331,13 +305,7 @@ impl Download for Album<WithExtra> {
         };
 
         let path = downloader.get_album_path(self, true)?;
-        Ok((
-            fut,
-            DownloadInfo {
-                path,
-                progress_rx: oneshot_rx,
-            },
-        ))
+        Ok((fut, DownloadInfo { path, progress_rx }))
     }
 }
 
@@ -358,38 +326,23 @@ impl Download for Playlist<WithExtra> {
     > {
         let tracks = &self.tracks.items;
 
-        let (oneshot_tx, oneshot_rx) = oneshot::channel();
+        let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
-            let mut iterator = tracks.iter().enumerate();
-
-            let Some((i, first_track)) = iterator.next() else {
-                // TODO: Is this the right way to handle this ?
-                return Ok(());
-            };
-
-            let (fut, res) = first_track.download(downloader)?;
-            let (tx, rx) = watch::channel(ArrayDownloadProgress {
-                current: first_track.clone(), // TODO: Avoid cloning track
-                position: i,
-                total: tracks.len(),
-                track_path: res.path,
-            });
-            let _ = oneshot_tx.send(rx);
-
-            fut.await?;
-
-            for (i, track) in iterator {
+            for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = downloader.client.get_track(&track.id.to_string()).await?;
                 let (fut, res) = track.download(downloader)?;
 
-                tx.send_replace(ArrayDownloadProgress {
-                    current: track.clone(), // TODO: Avoid cloning track
-                    position: i,
-                    total: tracks.len(),
-                    track_path: res.path,
-                });
+                progress_tx
+                    .send(ArrayDownloadProgress {
+                        current: track.clone(), // TODO: Avoid cloning track
+                        position: i,
+                        total: tracks.len(),
+                        track_path: res.path,
+                    })
+                    .await
+                    .expect("The mpsc will never be closed on the receiving side");
 
                 fut.await?;
             }
@@ -404,13 +357,7 @@ impl Download for Playlist<WithExtra> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let path = downloader.write_m3u(self, &track_paths)?;
-        Ok((
-            fut,
-            DownloadInfo {
-                path,
-                progress_rx: oneshot_rx,
-            },
-        ))
+        Ok((fut, DownloadInfo { path, progress_rx }))
     }
 }
 
@@ -459,7 +406,7 @@ mod tests {
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
         let (fut, res) = track.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
     }
 
@@ -476,7 +423,7 @@ mod tests {
             .unwrap();
         let (fut, res) = album.download(&downloader).unwrap();
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
     }
 }

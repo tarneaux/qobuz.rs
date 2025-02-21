@@ -53,7 +53,7 @@ async fn main() {
                 println!("{}/{}: {}", i + 1, n, t.title);
                 let (fut, res) = t.download(&downloader).unwrap();
                 tokio::spawn(async move {
-                    let mut rx = res.progress_rx.await.unwrap();
+                    let mut rx = res.progress_rx.await.unwrap().expect("No status returned");
                     while rx.changed().await.is_ok() {
                         let percent = {
                             let progress = rx.borrow();
