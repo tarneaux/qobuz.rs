@@ -15,10 +15,10 @@ pub enum Quality {
 impl Display for Quality {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Mp3 => write!(f, "MP3 320"),
-            Self::Cd => write!(f, "CD / Lossless"),
-            Self::HiRes96 => write!(f, "Hi-Res 24-bit, up to 96 kHz"),
-            Self::HiRes192 => write!(f, "Hi-Res 24-bit, up to 192 kHz"),
+            Self::Mp3 => write!(f, "MP3"),
+            Self::Cd => write!(f, "CD"),
+            Self::HiRes96 => write!(f, "HiRes96"),
+            Self::HiRes192 => write!(f, "HiRes192"),
         }
     }
 }
