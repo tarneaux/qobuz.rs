@@ -8,7 +8,6 @@ use crate::{
 };
 use futures::{Future, StreamExt};
 use std::{
-    error::Error,
     ffi::OsStr,
     fmt::Debug,
     io::Write,
@@ -90,7 +89,7 @@ impl Downloader {
         playlist: &Playlist<WithExtra>,
         track_paths: &[PathBuf],
     ) -> Result<PathBuf, DownloadError> {
-        let m3u_path = self.get_m3u_path(playlist)?;
+        let m3u_path = self.get_m3u_path(playlist);
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
@@ -153,63 +152,48 @@ impl Downloader {
         Ok(())
     }
 
-    pub fn get_album_path<EF>(
-        &self,
-        album: &Album<EF>,
-        ensure_exists: bool,
-    ) -> Result<PathBuf, tera::Error>
+    pub fn get_album_path<EF>(&self, album: &Album<EF>) -> PathBuf
     where
         EF: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
         let mut path = self.root.to_path_buf();
-        path.push(sanitize_filename(&self.path_format.get_album_dir(album)?));
-        if ensure_exists && !path.is_dir() {
-            std::fs::create_dir_all(&path)?;
-        }
-        Ok(path)
+        path.push(sanitize_filename(
+            &self.path_format.get_album_dir(album, &self.quality),
+        ));
+        path
     }
 
-    pub fn get_track_path<EF>(
-        &self,
-        track: &Track<EF>,
-        album_path: &Path,
-    ) -> Result<PathBuf, tera::Error>
+    pub fn get_track_path<EF>(&self, track: &Track<EF>, album_path: &Path) -> PathBuf
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
     {
         let mut path = album_path.to_path_buf();
         path.push(format!(
             "{}.{}",
-            sanitize_filename(&self.path_format.get_track_file_basename(track)?,),
+            sanitize_filename(&self.path_format.get_track_file_basename(track)),
             FileExtension::from(&self.quality)
         ));
-        Ok(path)
+        path
     }
 
-    pub fn get_m3u_path(&self, playlist: &Playlist<WithExtra>) -> Result<PathBuf, tera::Error> {
+    #[must_use]
+    pub fn get_m3u_path(&self, playlist: &Playlist<WithExtra>) -> PathBuf {
         let mut path = self.m3u_dir.to_path_buf();
-        path.push(format!(
-            "{}.m3u",
-            sanitize_filename(&self.path_format.get_m3u_file_basename(playlist)?),
-        ));
-        Ok(path)
+        path.push(format!("{}.m3u", sanitize_filename(&playlist.name)));
+        path
     }
 }
 
 pub trait Download: RootEntity {
     type ProgressType: Debug + Clone;
-    type E: Error;
 
     fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<
-        (
-            impl Future<Output = Result<(), DownloadError>>,
-            DownloadInfo<Self::ProgressType>,
-        ),
-        Self::E,
-    >;
+    ) -> (
+        impl Future<Output = Result<(), DownloadError>>,
+        DownloadInfo<Self::ProgressType>,
+    );
 }
 
 pub struct DownloadInfo<ProgressType> {
@@ -233,27 +217,24 @@ pub struct ArrayDownloadProgress {
 
 impl Download for Track<WithExtra> {
     type ProgressType = TrackDownloadProgress;
-    type E = tera::Error;
 
     /// Download and tag a track, returning the download locations of the album and track.
     fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<
-        (
-            impl Future<Output = Result<(), DownloadError>>,
-            DownloadInfo<Self::ProgressType>,
-        ),
-        Self::E,
-    > {
-        let album_path = downloader.get_album_path(&self.album, true)?;
-        let path = downloader.get_track_path(self, &album_path)?;
+    ) -> (
+        impl Future<Output = Result<(), DownloadError>>,
+        DownloadInfo<Self::ProgressType>,
+    ) {
+        let album_path = downloader.get_album_path(&self.album);
+        let path = downloader.get_track_path(self, &album_path);
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = {
             let path = path.clone();
             async move {
+                std::fs::create_dir_all(&album_path)?;
                 downloader.download_track(self, &path, progress_tx).await?;
                 tag_track(self, &path, &self.album).await?;
 
@@ -261,24 +242,20 @@ impl Download for Track<WithExtra> {
             }
         };
 
-        Ok((fut, DownloadInfo { path, progress_rx }))
+        (fut, DownloadInfo { path, progress_rx })
     }
 }
 
 impl Download for Album<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
-    type E = tera::Error;
 
     fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<
-        (
-            impl Future<Output = Result<(), DownloadError>>,
-            DownloadInfo<Self::ProgressType>,
-        ),
-        Self::E,
-    > {
+    ) -> (
+        impl Future<Output = Result<(), DownloadError>>,
+        DownloadInfo<Self::ProgressType>,
+    ) {
         let tracks = &self.tracks.items;
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
@@ -287,7 +264,7 @@ impl Download for Album<WithExtra> {
             for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = downloader.client.get_track(&track.id.to_string()).await?;
-                let (fut, res) = track.download(downloader)?;
+                let (fut, res) = track.download(downloader);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
@@ -304,60 +281,52 @@ impl Download for Album<WithExtra> {
             Ok(())
         };
 
-        let path = downloader.get_album_path(self, true)?;
-        Ok((fut, DownloadInfo { path, progress_rx }))
+        let path = downloader.get_album_path(self);
+        (fut, DownloadInfo { path, progress_rx })
     }
 }
 
 // TODO: Deduplicate implementations
 impl Download for Playlist<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
-    type E = DownloadError;
 
     fn download(
         &self,
         downloader: &Downloader,
-    ) -> Result<
-        (
-            impl Future<Output = Result<(), DownloadError>>,
-            DownloadInfo<Self::ProgressType>,
-        ),
-        Self::E,
-    > {
+    ) -> (
+        impl Future<Output = Result<(), DownloadError>>,
+        DownloadInfo<Self::ProgressType>,
+    ) {
         let tracks = &self.tracks.items;
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
+            let mut track_paths: Vec<PathBuf> = vec![];
             for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = downloader.client.get_track(&track.id.to_string()).await?;
-                let (fut, res) = track.download(downloader)?;
+                let (fut, res) = track.download(downloader);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
-                        current: track.clone(), // TODO: Avoid cloning track
+                        current: track.clone(), // TODO: Avoid cloning
                         position: i,
                         total: tracks.len(),
-                        track_path: res.path,
+                        track_path: res.path.clone(),
                     })
                     .await
                     .expect("The mpsc will never be closed on the receiving side");
 
                 fut.await?;
+                track_paths.push(res.path);
             }
+            downloader.write_m3u(self, &track_paths)?;
             Ok(())
         };
 
-        let track_paths = tracks
-            .iter()
-            .map(|t| -> Result<PathBuf, tera::Error> {
-                let album_path = downloader.get_album_path(&t.album, true)?;
-                downloader.get_track_path(t, &album_path)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let path = downloader.write_m3u(self, &track_paths)?;
-        Ok((fut, DownloadInfo { path, progress_rx }))
+        let path = downloader.get_m3u_path(self);
+        (fut, DownloadInfo { path, progress_rx })
     }
 }
 
@@ -371,8 +340,6 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
-    #[error("Tera error `{0}`")]
-    TeraError(#[from] tera::Error),
     #[error("Failed to strip prefix from path: `{0}`")]
     PathStripPrefixError(#[from] std::path::StripPrefixError),
 }
@@ -404,7 +371,7 @@ mod tests {
     async fn test_download_track() {
         let (client, downloader) = make_client_and_downloader().await;
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
-        let (fut, res) = track.download(&downloader).unwrap();
+        let (fut, res) = track.download(&downloader);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
@@ -421,7 +388,7 @@ mod tests {
                 e
             })
             .unwrap();
-        let (fut, res) = album.download(&downloader).unwrap();
+        let (fut, res) = album.download(&downloader);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);

@@ -51,7 +51,7 @@ async fn main() {
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
-                let (fut, res) = t.download(&downloader).unwrap();
+                let (fut, res) = t.download(&downloader);
                 tokio::spawn(async move {
                     let mut rx = res.progress_rx.await.unwrap().expect("No status returned");
                     while rx.changed().await.is_ok() {
