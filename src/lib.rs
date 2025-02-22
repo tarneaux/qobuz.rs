@@ -298,8 +298,8 @@ impl Client {
     /// let mut bytes_stream = client
     ///     .stream_track("129342731", Quality::HiRes96)
     ///     .await
-    ///     .0
-    ///     .unwrap();
+    ///     .unwrap()
+    ///     .0;
     /// let mut out = File::create("let_it_be.mp3")
     ///     .await
     ///     .expect("failed to create file");

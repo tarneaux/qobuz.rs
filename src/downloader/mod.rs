@@ -45,14 +45,22 @@ impl Downloader {
     /// ```
     /// # use tokio_test;
     /// # tokio_test::block_on(async {
-    /// use qobuz::{auth::Credentials, Client, downloader::Downloader};
+    /// use qobuz::{
+    ///     auth::Credentials,
+    ///     Client,
+    ///     downloader::{Downloader, path_format::PathFormat},
+    ///     quality::Quality
+    /// };
     /// use std::path::Path;
     /// let credentials = Credentials::from_env().unwrap();
     /// let client = Client::new(credentials).await.unwrap();
     /// let downloader = Downloader::new(
     ///     client,
     ///     Path::new("music"),
-    ///     Path::new("music/playlists")
+    ///     Path::new("music/playlists"),
+    ///     Quality::Mp3,
+    ///     true, // Overwrite files
+    ///     PathFormat::default(),
     /// ).unwrap();
     /// # })
     /// ```
