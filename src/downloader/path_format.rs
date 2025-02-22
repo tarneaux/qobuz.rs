@@ -22,7 +22,7 @@ impl PathFormat {
     where
         EF: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
-        self.album_format.format(&AlbumFormat {
+        self.album_format.format(&AlbumInfo {
             artist: &album.artist.name,
             title: &album.title,
             year: album.release_date_original.year(),
@@ -35,7 +35,7 @@ impl PathFormat {
     where
         EF: ExtraFlag<Album<WithoutExtra>>,
     {
-        self.track_format.format(&TrackFormat {
+        self.track_format.format(&TrackInfo {
             track_number: track.track_number,
             title: &track.title,
         })
@@ -141,8 +141,8 @@ pub enum FormatParseError {
 
 pub trait Placeholder: FromStr<Err = IllegalPlaceholderError> + std::fmt::Display {}
 
-macro_rules! impl_placeholder_and_format {
-    ($placeholder:ident, $format:ident, { $($field:ident: $ty:ty),+ $(,)? }) => {
+macro_rules! impl_placeholder_and_info {
+    ($placeholder:ident, $info:ident, { $($field:ident: $ty:ty),+ $(,)? }) => {
         paste! {
             #[derive(Debug, Clone, PartialEq, Eq)]
             pub enum $placeholder {
@@ -164,44 +164,42 @@ macro_rules! impl_placeholder_and_format {
             impl std::fmt::Display for $placeholder {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
                     match self {
-                        $( $placeholder::[< $field:camel >] => write!(f, "{}", stringify!($field).to_string()), )+
+                        $( Self::[< $field:camel >] => write!(f, stringify!($field)), )+
                     }
                 }
             }
 
             #[derive(Debug, Clone)]
-            pub struct $format<'a> {
+            pub struct $info<'a> {
                 $( pub $field: $ty ),+
             }
 
             impl<'a> Format<$placeholder> {
                 #[must_use]
-                pub fn format(&self, data: &$format<'a>) -> String {
-                    let mut result = String::new();
-                    for seg in &self.segments {
-                        match seg {
-                            FormatSegment::Literal(s) => result.push_str(s),
+                pub fn format(&self, data: &$info<'a>) -> String {
+                    self.segments.iter().map(|s| {
+                        match s {
+                            FormatSegment::Literal(s) => s.to_string(),
                             FormatSegment::Placeholder(ph) => {
                                 let value = match ph {
                                     $( $placeholder::[< $field:camel >] => data.$field.to_string(), )+
                                 };
-                                result.push_str(&value);
+                                value
                             }
                         }
-                    }
-                    result
+                    }).collect()
                 }
             }
         }
     }
 }
 
-impl_placeholder_and_format!(TrackPlaceholder, TrackFormat, {
+impl_placeholder_and_info!(TrackPlaceholder, TrackInfo, {
     track_number: u64,
     title: &'a str,
 });
 
-impl_placeholder_and_format!(AlbumPlaceholder, AlbumFormat, {
+impl_placeholder_and_info!(AlbumPlaceholder, AlbumInfo, {
     artist: &'a str,
     title: &'a str,
     year: i32,
