@@ -17,13 +17,20 @@ pub async fn make_client() -> Client {
 }
 
 pub async fn make_client_and_downloader() -> (Client, Downloader) {
+    let music_path = Path::new("music");
+    let playlist_path = Path::new("music/playlists");
+
+    if !playlist_path.is_dir() {
+        std::fs::create_dir_all(playlist_path).unwrap();
+    }
+
     let client = make_client().await;
     (
         client.clone(),
         Downloader::new(
             client,
-            Path::new("music"),
-            Path::new("music/playlists"),
+            music_path,
+            playlist_path,
             Quality::Cd,
             true,
             PathFormat::default(),
