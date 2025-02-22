@@ -126,10 +126,8 @@ impl<P: Placeholder> std::fmt::Display for FormatSegment<P> {
 }
 
 #[derive(Debug, Clone, Error)]
-#[error("Illegal placeholder: `{placeholder_name}`")]
-pub struct IllegalPlaceholderError {
-    placeholder_name: String,
-}
+#[error("Illegal placeholder: `{0}`")]
+pub struct IllegalPlaceholderError(String);
 
 #[derive(Debug, Clone, Error)]
 pub enum FormatParseError {
@@ -156,7 +154,7 @@ macro_rules! impl_placeholder_and_info {
                 fn from_str(s: &str) -> Result<Self, Self::Err> {
                     match s {
                         $( stringify!($field) => Ok(Self::[< $field:camel >]), )+
-                        _ => Err(IllegalPlaceholderError { placeholder_name: s.to_string() }),
+                        _ => Err(IllegalPlaceholderError(s.to_string())),
                     }
                 }
             }
