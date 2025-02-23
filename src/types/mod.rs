@@ -145,6 +145,7 @@ where
 }
 
 impl Album<WithExtra> {
+    #[must_use]
     pub fn get_tracks_with_extra(&self) -> Vec<Track<WithExtra>> {
         let s = self.clone().without_extra();
         self.tracks
