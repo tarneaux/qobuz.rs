@@ -2,7 +2,14 @@ macro_rules! builder {
     (
         $(#[$outer:meta])*
         $target:ident {
-            provided: { $($provided_field:ident : $provided_ty:ty = $provided_arg_ty:ty => $provided_conv_fn:expr),* $(,)? },
+            provided: {
+                $(
+                    $provided_field:ident: $provided_ty:ty
+                    =
+                    $provided_arg_ty:ty => $provided_conv_fn:expr
+                ),*
+                $(,)?
+            },
             default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
         },
         verify: Result<(), $verify_err:ty> = $verify:block
