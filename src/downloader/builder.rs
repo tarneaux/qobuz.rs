@@ -3,7 +3,7 @@ macro_rules! builder {
         $(#[$outer:meta])*
         $target:ident,
         {
-            required: { $($req_field:ident : $req_ty:ty),* $(,)? },
+            required: { $($req_field:ident : $req_ty:ty = $req_arg_ty:ty => $req_arg_conv_fn:expr),* $(,)? },
             default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
         },
         $verify:block,
@@ -18,8 +18,10 @@ macro_rules! builder {
 
             impl [<$target Builder>] {
                 #[must_use]
-                pub fn new($($req_field: $req_ty),*) -> Self {
-                    $(let $req_field: $req_ty = $req_field;)*
+                pub fn new($($req_field: $req_arg_ty),*) -> Self {
+                    $(let $req_field: $req_ty = $req_arg_conv_fn;)*
+                    // This assignment is done separately to allow computing default values based
+                    // on required fields
                     $(let $def_field = $def_value;)*
                     Self {
                         $($req_field,)*
@@ -64,6 +66,17 @@ macro_rules! builder {
                         $($req_field: value.$req_field),*,
                         $($def_field: value.$def_field),*
                     }
+                }
+            }
+
+            impl $target {
+                pub fn builder($($req_field: $req_arg_ty),*) -> [<$target Builder>] {
+                    [<$target Builder>]::new($($req_field),*)
+                }
+
+                #[must_use]
+                pub fn rebuild(self) -> [<$target Builder>] {
+                    self.into()
                 }
             }
         }

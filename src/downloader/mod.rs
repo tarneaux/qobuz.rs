@@ -12,7 +12,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Debug,
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use thiserror::Error;
 use tokio::{
@@ -61,22 +61,43 @@ mod builder;
 /// ```
 #[derive(Debug, Clone)]
 pub struct DownloadConfig {
-    root_dir: Box<Path>,
-    m3u_dir: Box<Path>,
+    root_dir: PathBuf,
+    m3u_dir: PathBuf,
     quality: Quality,
     overwrite: bool,
     path_format: PathFormat,
 }
 
-impl DownloadConfig {
-    pub fn builder(root_dir: impl Into<Box<Path>>) -> DownloadConfigBuilder {
-        DownloadConfigBuilder::new(root_dir.into())
-    }
-
-    #[must_use]
-    pub fn rebuild(self) -> DownloadConfigBuilder {
-        self.into()
-    }
+builder! {
+    /// A builder for `DownloadConfig`.
+    ///
+    /// * `root_dir` and `m3u_dir` - Where tracks and playlists are saved. By default, `m3u_dir`
+    /// will be set to `{root_dir}/playlists`.
+    /// * `quality` - The quality at which tracks are downloaded.
+    /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
+    /// * `path_format` - The format options for file names.
+    DownloadConfig,
+    {
+        required: {
+            root_dir: PathBuf = impl Into<PathBuf> => root_dir.into(),
+        },
+        default: {
+            m3u_dir: PathBuf = root_dir.join("playlists"),
+            quality: Quality = Quality::default(),
+            overwrite: bool = false,
+            path_format: PathFormat = PathFormat::default(),
+        }
+    },
+    {
+        if !root_dir.exists() {
+            return Err(NonExistentDirectoryError::RootDir(root_dir));
+        }
+        if !m3u_dir.exists() {
+            return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
+        }
+        Ok(())
+    },
+    NonExistentDirectoryError
 }
 
 pub trait Download: RootEntity {
@@ -263,13 +284,11 @@ pub trait GetPath: QobuzType {
 
 impl GetPath for Track<WithExtra> {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
-        let mut path = self.album.get_path(download_config);
-        path.push(format!(
+        self.album.get_path(download_config).join(format!(
             "{}.{}",
             sanitize_filename(&download_config.path_format.get_track_file_basename(self)),
             FileExtension::from(&download_config.quality)
-        ));
-        path
+        ))
     }
 }
 
@@ -278,13 +297,11 @@ where
     EF: ExtraFlag<Array<Track<WithoutExtra>>>,
 {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
-        let mut path = download_config.root_dir.to_path_buf();
-        path.push(sanitize_filename(
+        download_config.root_dir.join(sanitize_filename(
             &download_config
                 .path_format
                 .get_album_dir(self, &download_config.quality),
-        ));
-        path
+        ))
     }
 }
 
@@ -293,9 +310,9 @@ where
     EF: ExtraFlag<Array<Track<WithExtra>>>,
 {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
-        let mut path = download_config.m3u_dir.to_path_buf();
-        path.push(format!("{}.m3u", sanitize_filename(&self.name)));
-        path
+        download_config
+            .m3u_dir
+            .join(format!("{}.m3u", sanitize_filename(&self.name)))
     }
 }
 
@@ -346,44 +363,12 @@ pub enum DownloadError {
     ApiError(#[from] ApiError),
 }
 
-builder! {
-    /// A builder for `DownloadConfig`.
-    ///
-    /// * `root_dir` and `m3u_dir` - Where tracks and playlists are saved. By default, `m3u_dir`
-    /// will be set to `{root_dir}/playlists`.
-    /// * `quality` - The quality at which tracks are downloaded.
-    /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
-    /// * `path_format` - The format options for file names.
-    DownloadConfig,
-    {
-        required: {
-            root_dir: Box<Path>,
-        },
-        default: {
-            m3u_dir: Box<Path> = root_dir.to_path_buf().join("playlists").into(),
-            quality: Quality = Quality::default(),
-            overwrite: bool = false,
-            path_format: PathFormat = PathFormat::default(),
-        }
-    },
-    {
-        if !root_dir.exists() {
-            return Err(NonExistentDirectoryError::RootDir(root_dir));
-        }
-        if !m3u_dir.exists() {
-            return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
-        }
-        Ok(())
-    },
-    NonExistentDirectoryError
-}
-
 #[derive(Debug, Error)]
 pub enum NonExistentDirectoryError {
     #[error("Non existent download root directory `{0}`")]
-    RootDir(Box<Path>),
+    RootDir(PathBuf),
     #[error("Non existent m3u directory `{0}`")]
-    M3uDir(Box<Path>),
+    M3uDir(PathBuf),
 }
 
 #[must_use]
