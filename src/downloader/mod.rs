@@ -12,7 +12,6 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Debug,
     io::Write,
-    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
@@ -325,7 +324,11 @@ pub fn write_m3u(
                 .to_owned()
         })
         .collect::<Vec<OsString>>();
-    let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
+    let track_paths = track_paths.join(
+        // SAFETY: \n is a valid UTF-8 character
+        // > Callers must pass in bytes that originated as a mixture of validated UTF-8 and [...]
+        unsafe { OsStr::from_encoded_bytes_unchecked(b"\n") },
+    );
     file.write_all(track_paths.as_encoded_bytes())?;
 
     Ok(m3u_path)
