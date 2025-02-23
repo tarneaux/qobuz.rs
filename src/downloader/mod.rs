@@ -86,6 +86,7 @@ pub trait Download: RootEntity {
     type ProgressType: Debug;
     type PathInfoType: Debug;
 
+    #[must_use]
     fn download(
         &self,
         download_config: &DownloadConfig,
