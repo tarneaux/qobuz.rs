@@ -31,17 +31,21 @@ enum Transmitter<T> {
 
 impl<T> Transmitter<T> {
     fn send_replace(&mut self, msg: T) {
-        // This is safe because we are reassigning to self just after having zeroed it.
-        *self = match mem::replace(self, unsafe { mem::zeroed() }) {
-            Self::NotInitialized(sender) => {
-                let (tx, rx) = watch::channel(msg);
-                let _ = sender.send(rx);
-                Self::Initialized(tx)
-            }
-            Self::Initialized(tx) => {
-                tx.send_replace(msg);
-                Self::Initialized(tx)
+        fn f<T>(s: Transmitter<T>, msg: T) -> Transmitter<T> {
+            match s {
+                Transmitter::NotInitialized(sender) => {
+                    let (tx, rx) = watch::channel(msg);
+                    let _ = sender.send(rx);
+                    Transmitter::Initialized(tx)
+                }
+                Transmitter::Initialized(tx) => {
+                    tx.send_replace(msg);
+                    Transmitter::Initialized(tx)
+                }
             }
         }
+
+        // SAFETY: We reassign just after having zeroed the memory.
+        *self = f(mem::replace(self, unsafe { mem::zeroed() }), msg);
     }
 }
