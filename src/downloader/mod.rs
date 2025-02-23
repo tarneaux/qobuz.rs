@@ -18,7 +18,7 @@ use std::{
 use thiserror::Error;
 use tokio::{
     fs::OpenOptions,
-    sync::{oneshot, watch},
+    sync::{mpsc, oneshot, watch},
 };
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
@@ -83,7 +83,7 @@ impl DownloadConfig {
     pub fn write_m3u(
         &self,
         playlist: &Playlist<WithExtra>,
-        track_paths: &[PathBuf],
+        track_paths: &[Box<Path>],
     ) -> Result<PathBuf, DownloadError> {
         let m3u_path = self.get_m3u_path(playlist);
         let mut file = std::fs::OpenOptions::new()
@@ -232,6 +232,33 @@ impl Download for Track<WithExtra> {
     }
 }
 
+async fn download_tracks(
+    tracks: &[Track<WithExtra>],
+    download_config: &DownloadConfig,
+    client: &crate::Client,
+    progress_tx: mpsc::Sender<ArrayDownloadProgress>,
+) -> Result<Vec<Box<Path>>, DownloadError> {
+    let mut paths: Vec<Box<Path>> = vec![];
+    for (i, track) in tracks.iter().enumerate() {
+        let (fut, res) = track.download(download_config, client);
+
+        progress_tx
+            .send(ArrayDownloadProgress {
+                current: track.clone(), // TODO: Avoid cloning track
+                position: i,
+                total: tracks.len(),
+                track_path: res.path.clone(),
+            })
+            .await
+            .expect("The mpsc will never be closed on the receiving side");
+
+        fut.await?;
+
+        paths.push(res.path.into());
+    }
+    Ok(paths)
+}
+
 impl Download for Album<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
 
@@ -244,26 +271,12 @@ impl Download for Album<WithExtra> {
         DownloadInfo<Self::ProgressType>,
     ) {
         let tracks = self.get_tracks_with_extra();
-
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
-            for (i, track) in tracks.iter().enumerate() {
-                let (fut, res) = track.download(download_config, client);
-
-                progress_tx
-                    .send(ArrayDownloadProgress {
-                        current: track.clone(), // TODO: Avoid cloning track
-                        position: i,
-                        total: tracks.len(),
-                        track_path: res.path,
-                    })
-                    .await
-                    .expect("The mpsc will never be closed on the receiving side");
-
-                fut.await?;
-            }
-            Ok(())
+            download_tracks(&tracks, download_config, client, progress_tx)
+                .await
+                .map(|_| ())
         };
 
         let path = download_config.get_album_path(self);
@@ -288,25 +301,9 @@ impl Download for Playlist<WithExtra> {
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
-            let mut track_paths: Vec<PathBuf> = vec![];
-            for (i, track) in tracks.iter().enumerate() {
-                let (fut, res) = track.download(download_config, client);
-
-                progress_tx
-                    .send(ArrayDownloadProgress {
-                        current: track.clone(), // TODO: Avoid cloning
-                        position: i,
-                        total: tracks.len(),
-                        track_path: res.path.clone(),
-                    })
-                    .await
-                    .expect("The mpsc will never be closed on the receiving side");
-
-                fut.await?;
-                track_paths.push(res.path);
-            }
-            download_config.write_m3u(self, &track_paths)?;
-            Ok(())
+            download_tracks(tracks, download_config, client, progress_tx)
+                .await
+                .and_then(|paths| download_config.write_m3u(self, paths.as_ref()).map(|_| ()))
         };
 
         let path = download_config.get_m3u_path(self);
