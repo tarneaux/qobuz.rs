@@ -90,6 +90,7 @@ impl DownloadConfig {
             .write(true)
             .create(true)
             .truncate(true)
+            .create_new(!self.overwrite) // (Shadows create and truncate)
             .open(&m3u_path)?;
         let track_paths = track_paths
             .iter()
