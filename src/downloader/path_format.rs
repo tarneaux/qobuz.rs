@@ -140,16 +140,16 @@ pub enum FormatParseError {
 pub trait Placeholder: FromStr<Err = IllegalPlaceholderError> + std::fmt::Display {}
 
 macro_rules! impl_placeholder_and_info {
-    ($placeholder:ident, $info:ident, { $($field:ident: $ty:ty),+ $(,)? }) => {
+    ($type:ident, { $($field:ident: $ty:ty),+ $(,)? }) => {
         paste! {
             #[derive(Debug, Clone, PartialEq, Eq)]
-            pub enum $placeholder {
+            pub enum [<$type Placeholder>] {
                 $( [< $field:camel >] ),+
             }
 
-            impl Placeholder for $placeholder {}
+            impl Placeholder for [<$type Placeholder>] {}
 
-            impl FromStr for $placeholder {
+            impl FromStr for [<$type Placeholder>] {
                 type Err = IllegalPlaceholderError;
                 fn from_str(s: &str) -> Result<Self, Self::Err> {
                     match s {
@@ -159,7 +159,7 @@ macro_rules! impl_placeholder_and_info {
                 }
             }
 
-            impl std::fmt::Display for $placeholder {
+            impl std::fmt::Display for [<$type Placeholder>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
                     match self {
                         $( Self::[< $field:camel >] => write!(f, stringify!($field)), )+
@@ -168,19 +168,19 @@ macro_rules! impl_placeholder_and_info {
             }
 
             #[derive(Debug, Clone)]
-            pub struct $info<'a> {
+            pub struct [<$type Info>]<'a> {
                 $( pub $field: $ty ),+
             }
 
-            impl<'a> Format<$placeholder> {
+            impl<'a> Format<[<$type Placeholder>]> {
                 #[must_use]
-                pub fn format(&self, data: &$info<'a>) -> String {
+                pub fn format(&self, data: &[<$type Info>]<'a>) -> String {
                     self.segments.iter().map(|s| {
                         match s {
                             FormatSegment::Literal(s) => s.to_string(),
                             FormatSegment::Placeholder(ph) => {
                                 let value = match ph {
-                                    $( $placeholder::[< $field:camel >] => data.$field.to_string(), )+
+                                    $( [<$type Placeholder>]::[< $field:camel >] => data.$field.to_string(), )+
                                 };
                                 value
                             }
@@ -192,12 +192,12 @@ macro_rules! impl_placeholder_and_info {
     }
 }
 
-impl_placeholder_and_info!(TrackPlaceholder, TrackInfo, {
+impl_placeholder_and_info!(Track, {
     track_number: u64,
     title: &'a str,
 });
 
-impl_placeholder_and_info!(AlbumPlaceholder, AlbumInfo, {
+impl_placeholder_and_info!(Album, {
     artist: &'a str,
     title: &'a str,
     year: i32,
