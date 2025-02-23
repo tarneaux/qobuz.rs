@@ -29,53 +29,37 @@ use delayed_watch::DelayedWatchReceiver;
 #[macro_use]
 mod builder;
 
-/// Options for downloads.
-///
-/// * `client` - Will be used to query information and download URLs.
-/// * `root` - Download root directory.
-/// * `m3u_dir` - Directory where to put m3u files.
-/// * `quality` - Quality to download at.
-/// * `overwrite` - Whether to overwrite existing files.
-/// * `path_format` - The path format for tracks and albums
-///
-/// # Example
-///
-/// ```
-/// # use tokio_test;
-/// # tokio_test::block_on(async {
-/// use qobuz::{
-///     auth::Credentials,
-///     Client,
-///     downloader::{DownloadConfig, path_format::PathFormat},
-///     quality::Quality
-/// };
-/// use std::path::Path;
-/// let credentials = Credentials::from_env().unwrap();
-/// let client = Client::new(credentials).await.unwrap();
-/// let opts = DownloadConfig::builder(Path::new("music"))
-///     .quality(Quality::Mp3)
-///     .overwrite(true)
-///     .build()
-///     .unwrap();
-/// # })
-/// ```
-#[derive(Debug, Clone)]
-pub struct DownloadConfig {
-    root_dir: PathBuf,
-    m3u_dir: PathBuf,
-    quality: Quality,
-    overwrite: bool,
-    path_format: PathFormat,
-}
-
 builder! {
-    /// A builder for `DownloadConfig`.
+    /// Options for downloads.
     ///
     /// * `root_dir` and `m3u_dir` - Where tracks and playlists are saved. By default, `m3u_dir`
     /// will be set to `{root_dir}/playlists`.
     /// * `quality` - The quality at which tracks are downloaded.
     /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
     /// * `path_format` - The format options for file names.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tokio_test;
+    /// # tokio_test::block_on(async {
+    /// use qobuz::{
+    ///     auth::Credentials,
+    ///     Client,
+    ///     downloader::{DownloadConfig, path_format::PathFormat},
+    ///     quality::Quality
+    /// };
+    /// use std::path::Path;
+    /// let credentials = Credentials::from_env().unwrap();
+    /// let client = Client::new(credentials).await.unwrap();
+    /// let opts = DownloadConfig::builder(Path::new("music"))
+    ///     .quality(Quality::Mp3)
+    ///     .overwrite(true)
+    ///     .build()
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[derive(Debug, Clone)]
     DownloadConfig,
     {
         required: {

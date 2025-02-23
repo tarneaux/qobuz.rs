@@ -11,6 +11,22 @@ macro_rules! builder {
     ) => {
         paste::paste! {
             $(#[$outer])*
+            pub struct $target {
+                $($req_field: $req_ty,)*
+                $($def_field: $def_ty,)*
+            }
+
+            impl $target {
+                pub fn builder($($req_field: $req_arg_ty),*) -> [<$target Builder>] {
+                    [<$target Builder>]::new($($req_field),*)
+                }
+
+                #[must_use]
+                pub fn rebuild(self) -> [<$target Builder>] {
+                    self.into()
+                }
+            }
+
             pub struct [<$target Builder>] {
                 $($req_field: $req_ty,)*
                 $($def_field: $def_ty,)*
@@ -66,17 +82,6 @@ macro_rules! builder {
                         $($req_field: value.$req_field),*,
                         $($def_field: value.$def_field),*
                     }
-                }
-            }
-
-            impl $target {
-                pub fn builder($($req_field: $req_arg_ty),*) -> [<$target Builder>] {
-                    [<$target Builder>]::new($($req_field),*)
-                }
-
-                #[must_use]
-                pub fn rebuild(self) -> [<$target Builder>] {
-                    self.into()
                 }
             }
         }
