@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::{auth::Credentials, downloader::DownloadOptions, Client};
+use crate::{auth::Credentials, downloader::DownloadConfig, Client};
 use std::path::Path;
 
 pub async fn make_client() -> Client {
@@ -11,7 +11,7 @@ pub async fn make_client() -> Client {
         .expect("Couldn't create client with environment secrets")
 }
 
-pub fn make_download_options() -> DownloadOptions {
+pub fn make_download_config() -> DownloadConfig {
     let root_dir: &Path = Path::new("music");
     let m3u_dir = Path::new("music/playlists");
 
@@ -19,7 +19,7 @@ pub fn make_download_options() -> DownloadOptions {
         std::fs::create_dir_all(m3u_dir).unwrap();
     }
 
-    DownloadOptions::builder(root_dir)
+    DownloadConfig::builder(root_dir)
         .m3u_dir(m3u_dir.into())
         .overwrite(true)
         .build()

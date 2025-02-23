@@ -5,7 +5,7 @@ const DIR: &str = "music";
 use futures::{stream, StreamExt};
 use qobuz::{
     auth::Credentials,
-    downloader::{Download, DownloadOptions},
+    downloader::{Download, DownloadConfig},
     types::{extra::WithExtra, Track},
     Client,
 };
@@ -27,7 +27,7 @@ async fn main() {
         .filter(|t| t.streamable)
         .collect();
 
-    let downloader = DownloadOptions::builder(Path::new(DIR)).build().unwrap();
+    let downloader = DownloadConfig::builder(Path::new(DIR)).build().unwrap();
 
     let n = tracks.len();
     let v = vec![None; n];

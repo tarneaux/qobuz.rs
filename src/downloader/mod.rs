@@ -45,13 +45,13 @@ mod builder;
 /// use qobuz::{
 ///     auth::Credentials,
 ///     Client,
-///     downloader::{DownloadOptions, path_format::PathFormat},
+///     downloader::{DownloadConfig, path_format::PathFormat},
 ///     quality::Quality
 /// };
 /// use std::path::Path;
 /// let credentials = Credentials::from_env().unwrap();
 /// let client = Client::new(credentials).await.unwrap();
-/// let opts = DownloadOptions::builder(Path::new("music"))
+/// let opts = DownloadConfig::builder(Path::new("music"))
 ///     .quality(Quality::Mp3)
 ///     .overwrite(true)
 ///     .build()
@@ -59,7 +59,7 @@ mod builder;
 /// # })
 /// ```
 #[derive(Debug, Clone)]
-pub struct DownloadOptions {
+pub struct DownloadConfig {
     root_dir: Box<Path>,
     m3u_dir: Box<Path>,
     quality: Quality,
@@ -67,13 +67,13 @@ pub struct DownloadOptions {
     path_format: PathFormat,
 }
 
-impl DownloadOptions {
-    pub fn builder(root_dir: impl Into<Box<Path>>) -> DownloadOptionsBuilder {
-        DownloadOptionsBuilder::new(root_dir.into())
+impl DownloadConfig {
+    pub fn builder(root_dir: impl Into<Box<Path>>) -> DownloadConfigBuilder {
+        DownloadConfigBuilder::new(root_dir.into())
     }
 
     #[must_use]
-    pub fn rebuild(self) -> DownloadOptionsBuilder {
+    pub fn rebuild(self) -> DownloadConfigBuilder {
         self.into()
     }
 
@@ -137,7 +137,7 @@ pub trait Download: RootEntity {
 
     fn download(
         &self,
-        download_options: &DownloadOptions,
+        download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
@@ -170,14 +170,14 @@ impl Download for Track<WithExtra> {
     /// Download and tag a track, returning the download locations of the album and track.
     fn download(
         &self,
-        download_options: &DownloadOptions,
+        download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
     ) {
-        let album_path = download_options.get_album_path(&self.album);
-        let path = download_options.get_track_path(self, &album_path);
+        let album_path = download_config.get_album_path(&self.album);
+        let path = download_config.get_track_path(self, &album_path);
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
@@ -190,7 +190,7 @@ impl Download for Track<WithExtra> {
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .create_new(!download_options.overwrite) // (Shadows create and truncate)
+                    .create_new(!download_config.overwrite) // (Shadows create and truncate)
                     .open(&path)
                     .await
                 {
@@ -204,7 +204,7 @@ impl Download for Track<WithExtra> {
                     }
                 };
                 let (mut bytes_stream, content_length) = client
-                    .stream_track(&self.id.to_string(), download_options.quality.clone())
+                    .stream_track(&self.id.to_string(), download_config.quality.clone())
                     .await?;
                 let mut downloaded: u64 = 0;
                 while let Some(item) = bytes_stream.next().await {
@@ -235,7 +235,7 @@ impl Download for Album<WithExtra> {
 
     fn download(
         &self,
-        download_options: &DownloadOptions,
+        download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
@@ -249,7 +249,7 @@ impl Download for Album<WithExtra> {
             for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
                 let track = client.get_track(&track.id.to_string()).await?;
-                let (fut, res) = track.download(download_options, client);
+                let (fut, res) = track.download(download_config, client);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
@@ -266,7 +266,7 @@ impl Download for Album<WithExtra> {
             Ok(())
         };
 
-        let path = download_options.get_album_path(self);
+        let path = download_config.get_album_path(self);
         (fut, DownloadInfo { path, progress_rx })
     }
 }
@@ -277,7 +277,7 @@ impl Download for Playlist<WithExtra> {
 
     fn download(
         &self,
-        download_options: &DownloadOptions,
+        download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
@@ -290,7 +290,7 @@ impl Download for Playlist<WithExtra> {
         let fut = async move {
             let mut track_paths: Vec<PathBuf> = vec![];
             for (i, track) in tracks.iter().enumerate() {
-                let (fut, res) = track.download(download_options, client);
+                let (fut, res) = track.download(download_config, client);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
@@ -305,11 +305,11 @@ impl Download for Playlist<WithExtra> {
                 fut.await?;
                 track_paths.push(res.path);
             }
-            download_options.write_m3u(self, &track_paths)?;
+            download_config.write_m3u(self, &track_paths)?;
             Ok(())
         };
 
-        let path = download_options.get_m3u_path(self);
+        let path = download_config.get_m3u_path(self);
         (fut, DownloadInfo { path, progress_rx })
     }
 }
@@ -329,7 +329,7 @@ pub enum DownloadError {
 }
 
 builder! {
-    DownloadOptionsBuilder, DownloadOptions, {
+    DownloadConfigBuilder, DownloadConfig, {
         required: {
             root_dir: Box<Path>,
         },
@@ -370,16 +370,16 @@ pub fn sanitize_filename(filename: &str) -> String {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    use crate::test_utils::{make_client, make_download_options};
+    use crate::test_utils::{make_client, make_download_config};
     use tokio::test;
 
     const HIRES192_TRACK: &str = "18893849"; // Creedence Clearwater Revival - Lodi
 
     #[test]
     async fn test_download_track() {
-        let (client, download_options) = (make_client().await, make_download_options());
+        let (client, download_config) = (make_client().await, make_download_config());
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
-        let (fut, res) = track.download(&download_options, &client);
+        let (fut, res) = track.download(&download_config, &client);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     async fn test_download_album() {
-        let (client, download_options) = (make_client().await, make_download_options());
+        let (client, download_config) = (make_client().await, make_download_config());
         let album = client
             .get_album("lz75qrx8pnjac")
             .await
@@ -396,7 +396,7 @@ mod tests {
                 e
             })
             .unwrap();
-        let (fut, res) = album.download(&download_options, &client);
+        let (fut, res) = album.download(&download_config, &client);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
