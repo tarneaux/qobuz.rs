@@ -242,14 +242,12 @@ impl Download for Album<WithExtra> {
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
     ) {
-        let tracks = &self.tracks.items;
+        let tracks = self.get_tracks_with_extra();
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
             for (i, track) in tracks.iter().enumerate() {
-                // TODO: Make Track<WithExtra> without the redundant API query
-                let track = client.get_track(&track.id.to_string()).await?;
                 let (fut, res) = track.download(download_config, client);
 
                 progress_tx

@@ -144,6 +144,17 @@ where
     }
 }
 
+impl Album<WithExtra> {
+    pub fn get_tracks_with_extra(&self) -> Vec<Track<WithExtra>> {
+        let s = self.clone().without_extra();
+        self.tracks
+            .items
+            .iter()
+            .map(|t| -> Track<WithExtra> { t.clone().with_extra(s.clone()) })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Artist<EF>
 where
