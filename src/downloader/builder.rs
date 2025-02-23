@@ -15,22 +15,26 @@ macro_rules! builder {
             }
 
             impl $target {
+                #[doc = "Create a new `" [<$target Builder>] "`, setting defaultless fields."]
                 pub fn builder($($provided_field: $provided_arg_ty),*) -> [<$target Builder>] {
                     [<$target Builder>]::new($($provided_field),*)
                 }
 
+                /// Create a builder to **modify fields** instead of starting from scratch.
                 #[must_use]
                 pub fn rebuild(self) -> [<$target Builder>] {
                     self.into()
                 }
             }
 
+            #[doc = "A builder for `" $target "`."]
             pub struct [<$target Builder>] {
                 $($provided_field: $provided_ty,)*
                 $($def_field: $def_ty,)*
             }
 
             impl [<$target Builder>] {
+                #[doc = "Create a new `" [<$target Builder>] "`, setting defaultless fields."]
                 #[must_use]
                 pub fn new($($provided_field: $provided_arg_ty),*) -> Self {
                     $(let $provided_field: $provided_ty = $provided_conv_fn;)*
@@ -43,6 +47,7 @@ macro_rules! builder {
                     }
                 }
 
+                #[doc = "Return the `" $target "` after verifying field correctness."]
                 pub fn build(self) -> Result<$target, $verify_err> {
                     $(let $provided_field = self.$provided_field;)*
                     $(let $def_field = self.$def_field;)*
@@ -55,6 +60,7 @@ macro_rules! builder {
                 }
 
                 $(
+                    #[doc = "Set the `" $provided_field "` field."]
                     #[must_use]
                     pub fn $provided_field(self, value: $provided_ty) -> Self {
                         Self {
@@ -65,6 +71,7 @@ macro_rules! builder {
                 )*
 
                 $(
+                    #[doc = "Set the `" $def_field "` field."]
                     #[must_use]
                     pub fn $def_field(self, value: $def_ty) -> Self {
                         Self {
