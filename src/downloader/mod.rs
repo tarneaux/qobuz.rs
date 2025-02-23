@@ -149,7 +149,7 @@ pub trait Download: RootEntity {
 
 pub struct DownloadInfo<ProgressType> {
     pub path: PathBuf,
-    pub progress_rx: oneshot::Receiver<Option<watch::Receiver<ProgressType>>>,
+    pub progress_rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
 }
 
 #[derive(Debug, Clone)]
@@ -389,7 +389,7 @@ mod tests {
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
         let (fut, res) = track.download(&download_config, &client);
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
     }
 
@@ -406,7 +406,7 @@ mod tests {
             .unwrap();
         let (fut, res) = album.download(&download_config, &client);
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
+        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
     }
 }
