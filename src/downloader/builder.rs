@@ -19,6 +19,16 @@ macro_rules! builder {
                 }
             }
 
+            pub fn build(self) -> Result<$target, $verify_err> {
+                $(let $req_field = self.$req_field;)*
+                $(let $def_field = self.$def_field;)*
+                $verify?;
+                Ok($target {
+                    $($req_field: $req_field,)*
+                    $($def_field: $def_field,)*
+                })
+            }
+
             $(
                 #[must_use]
                 pub fn $req_field(self, value: $req_ty) -> Self {
@@ -38,16 +48,6 @@ macro_rules! builder {
                     }
                 }
             )*
-
-            pub fn build(self) -> Result<$target, $verify_err> {
-                $(let $req_field = self.$req_field;)*
-                $(let $def_field = self.$def_field;)*
-                $verify?;
-                Ok($target {
-                    $($req_field: $req_field,)*
-                    $($def_field: $def_field,)*
-                })
-            }
         }
 
         impl From<$target> for $builder {
