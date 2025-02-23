@@ -6,7 +6,6 @@ use crate::{
     Quality,
 };
 use chrono::Datelike;
-use paste::paste;
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -141,7 +140,7 @@ pub trait Placeholder: FromStr<Err = IllegalPlaceholderError> + std::fmt::Displa
 
 macro_rules! impl_placeholder_and_info {
     ($type:ident, { $($field:ident: $ty:ty),+ $(,)? }) => {
-        paste! {
+        paste::paste! {
             #[derive(Debug, Clone, PartialEq, Eq)]
             pub enum [<$type Placeholder>] {
                 $( [< $field:camel >] ),+

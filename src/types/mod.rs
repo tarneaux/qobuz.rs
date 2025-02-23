@@ -6,7 +6,6 @@ pub mod traits;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use extra::{ExtraFlag, WithExtra, WithoutExtra};
-use paste::paste;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt::Display, time::Duration};
@@ -248,7 +247,7 @@ macro_rules! impl_qobuz_type {
         $t:ident,
         [$( $extra_type:ty ),+]
     ) => {
-        paste! {
+        paste::paste! {
             impl<EF> QobuzType for $t<EF>
             where
                 $( EF: ExtraFlag<$extra_type>, )+
