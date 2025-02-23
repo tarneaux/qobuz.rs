@@ -336,7 +336,6 @@ builder! {
     /// * `quality` - The quality at which tracks are downloaded.
     /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
     /// * `path_format` - The format options for file names.
-    DownloadConfigBuilder,
     DownloadConfig,
     {
         required: {
