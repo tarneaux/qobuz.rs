@@ -22,6 +22,8 @@ pub async fn transmit_while_open<T: Sync>(
     }
 }
 
+pub(super) type DelayedWatchReceiver<T> = oneshot::Receiver<watch::Receiver<T>>;
+
 enum Transmitter<T> {
     NotInitialized(oneshot::Sender<watch::Receiver<T>>),
     Initialized(watch::Sender<T>),

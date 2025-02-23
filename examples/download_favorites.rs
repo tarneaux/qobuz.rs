@@ -42,9 +42,9 @@ async fn main() {
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
-                let (fut, res) = t.download(&downloader, &client);
+                let (fut, progress_rx) = t.download(&downloader, &client);
                 tokio::spawn(async move {
-                    let mut rx = res.progress_rx.await.expect("No status returned");
+                    let mut rx = progress_rx.await.expect("No status returned");
                     while rx.changed().await.is_ok() {
                         let percent = {
                             let progress = rx.borrow();
@@ -54,9 +54,9 @@ async fn main() {
                         io::stdout().flush().unwrap();
                     }
                 });
-                fut.await.unwrap();
+                let path = fut.await.unwrap();
                 *playlist.write().await.get_mut(i).unwrap() =
-                    Some(res.path.to_str().unwrap().to_string());
+                    Some(path.to_str().unwrap().to_string());
             }
         })
         .await;

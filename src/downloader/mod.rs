@@ -26,6 +26,7 @@ pub mod path_format;
 use path_format::PathFormat;
 
 mod delayed_watch;
+use delayed_watch::DelayedWatchReceiver;
 #[macro_use]
 mod builder;
 
@@ -83,7 +84,7 @@ impl DownloadConfig {
     pub fn write_m3u(
         &self,
         playlist: &Playlist<WithExtra>,
-        track_paths: &[Box<Path>],
+        track_paths: &[PathBuf],
     ) -> Result<PathBuf, DownloadError> {
         let m3u_path = self.get_m3u_path(playlist);
         let mut file = std::fs::OpenOptions::new()
@@ -135,21 +136,17 @@ impl DownloadConfig {
 }
 
 pub trait Download: RootEntity {
-    type ProgressType: Debug + Clone;
+    type ProgressType: Debug;
+    type PathInfoType: Debug;
 
     fn download(
         &self,
         download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
-        impl Future<Output = Result<(), DownloadError>>,
-        DownloadInfo<Self::ProgressType>,
+        impl Future<Output = Result<Self::PathInfoType, DownloadError>>,
+        DelayedWatchReceiver<Self::ProgressType>,
     );
-}
-
-pub struct DownloadInfo<ProgressType> {
-    pub path: PathBuf,
-    pub progress_rx: oneshot::Receiver<watch::Receiver<ProgressType>>,
 }
 
 #[derive(Debug, Clone)]
@@ -158,16 +155,17 @@ pub struct TrackDownloadProgress {
     pub total: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ArrayDownloadProgress {
     pub current: Track<WithExtra>,
     pub position: usize,
     pub total: usize,
-    pub track_path: PathBuf,
+    pub track_progress_rx: oneshot::Receiver<watch::Receiver<TrackDownloadProgress>>,
 }
 
 impl Download for Track<WithExtra> {
     type ProgressType = TrackDownloadProgress;
+    type PathInfoType = PathBuf;
 
     /// Download and tag a track, returning the download locations of the album and track.
     fn download(
@@ -175,60 +173,56 @@ impl Download for Track<WithExtra> {
         download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
-        impl Future<Output = Result<(), DownloadError>>,
-        DownloadInfo<Self::ProgressType>,
+        impl Future<Output = Result<Self::PathInfoType, DownloadError>>,
+        DelayedWatchReceiver<Self::ProgressType>,
     ) {
-        let album_path = download_config.get_album_path(&self.album);
-        let path = download_config.get_track_path(self, &album_path);
-
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
-        let fut = {
-            let path = path.clone();
-            async move {
-                std::fs::create_dir_all(&album_path)?;
+        let fut = async move {
+            let album_path = download_config.get_album_path(&self.album);
+            let path = download_config.get_track_path(self, &album_path);
+            std::fs::create_dir_all(&album_path)?;
 
-                let mut out = match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .create_new(!download_config.overwrite) // (Shadows create and truncate)
-                    .open(&path)
-                    .await
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return match e.kind() {
-                            // TODO: Remove when using temp files
-                            std::io::ErrorKind::AlreadyExists => Ok(()),
-                            _ => Err(DownloadError::IoError(e)),
-                        };
-                    }
-                };
-                let (mut bytes_stream, content_length) = client
-                    .stream_track(&self.id.to_string(), download_config.quality.clone())
-                    .await?;
-                let mut downloaded: u64 = 0;
-                while let Some(item) = bytes_stream.next().await {
-                    let item = item?;
-                    tokio::io::copy(&mut item.as_ref(), &mut out).await?;
-                    downloaded += item.len() as u64;
-                    progress_tx
-                        .send(TrackDownloadProgress {
-                            downloaded,
-                            total: content_length,
-                        })
-                        .await
-                        .expect("The mpsc will never be closed on the receiving side");
+            let mut out = match OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .create_new(!download_config.overwrite) // (Shadows create and truncate)
+                .open(&path)
+                .await
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    return match e.kind() {
+                        // TODO: Remove when using temp files
+                        std::io::ErrorKind::AlreadyExists => Ok(path),
+                        _ => Err(DownloadError::IoError(e)),
+                    };
                 }
-
-                tag_track(self, &path, &self.album).await?;
-
-                Ok(())
+            };
+            let (mut bytes_stream, content_length) = client
+                .stream_track(&self.id.to_string(), download_config.quality.clone())
+                .await?;
+            let mut downloaded: u64 = 0;
+            while let Some(item) = bytes_stream.next().await {
+                let item = item?;
+                tokio::io::copy(&mut item.as_ref(), &mut out).await?;
+                downloaded += item.len() as u64;
+                progress_tx
+                    .send(TrackDownloadProgress {
+                        downloaded,
+                        total: content_length,
+                    })
+                    .await
+                    .expect("The mpsc will never be closed on the receiving side");
             }
+
+            tag_track(self, &path, &self.album).await?;
+
+            Ok(path)
         };
 
-        (fut, DownloadInfo { path, progress_rx })
+        (fut, progress_rx)
     }
 }
 
@@ -237,64 +231,68 @@ async fn download_tracks(
     download_config: &DownloadConfig,
     client: &crate::Client,
     progress_tx: mpsc::Sender<ArrayDownloadProgress>,
-) -> Result<Vec<Box<Path>>, DownloadError> {
-    let mut paths: Vec<Box<Path>> = vec![];
+) -> Result<Vec<PathBuf>, DownloadError> {
+    let mut paths: Vec<PathBuf> = vec![];
     for (i, track) in tracks.iter().enumerate() {
-        let (fut, res) = track.download(download_config, client);
+        let (fut, track_progress_rx) = track.download(download_config, client);
 
         progress_tx
             .send(ArrayDownloadProgress {
                 current: track.clone(), // TODO: Avoid cloning track
                 position: i,
                 total: tracks.len(),
-                track_path: res.path.clone(),
+                track_progress_rx,
             })
             .await
             .expect("The mpsc will never be closed on the receiving side");
 
-        fut.await?;
+        let path = fut.await?;
 
-        paths.push(res.path.into());
+        paths.push(path);
     }
     Ok(paths)
 }
 
 impl Download for Album<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
+    type PathInfoType = Vec<PathBuf>;
 
     fn download(
         &self,
         download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
-        impl Future<Output = Result<(), DownloadError>>,
-        DownloadInfo<Self::ProgressType>,
+        impl Future<Output = Result<Self::PathInfoType, DownloadError>>,
+        DelayedWatchReceiver<Self::ProgressType>,
     ) {
         let tracks = self.get_tracks_with_extra();
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
-        let fut = async move {
-            download_tracks(&tracks, download_config, client, progress_tx)
-                .await
-                .map(|_| ())
-        };
+        let fut =
+            async move { download_tracks(&tracks, download_config, client, progress_tx).await };
 
-        let path = download_config.get_album_path(self);
-        (fut, DownloadInfo { path, progress_rx })
+        (fut, progress_rx)
     }
+}
+
+#[derive(Debug)]
+pub struct PlaylistPathInfo {
+    pub track_paths: Vec<PathBuf>,
+    pub m3u_path: PathBuf,
 }
 
 // TODO: Deduplicate implementations
 impl Download for Playlist<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
+    type PathInfoType = PlaylistPathInfo;
 
     fn download(
         &self,
         download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
-        impl Future<Output = Result<(), DownloadError>>,
-        DownloadInfo<Self::ProgressType>,
+        impl Future<Output = Result<Self::PathInfoType, DownloadError>>,
+        DelayedWatchReceiver<Self::ProgressType>,
     ) {
         let tracks = &self.tracks.items;
 
@@ -303,11 +301,16 @@ impl Download for Playlist<WithExtra> {
         let fut = async move {
             download_tracks(tracks, download_config, client, progress_tx)
                 .await
-                .and_then(|paths| download_config.write_m3u(self, paths.as_ref()).map(|_| ()))
+                .and_then(|track_paths| {
+                    let m3u_path = download_config.write_m3u(self, track_paths.as_ref())?;
+                    Ok(PlaylistPathInfo {
+                        track_paths,
+                        m3u_path,
+                    })
+                })
         };
 
-        let path = download_config.get_m3u_path(self);
-        (fut, DownloadInfo { path, progress_rx })
+        (fut, progress_rx)
     }
 }
 
@@ -384,9 +387,9 @@ mod tests {
     async fn test_download_track() {
         let (client, download_config) = (make_client().await, make_download_config());
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
-        let (fut, res) = track.download(&download_config, &client);
+        let (fut, progress_rx) = track.download(&download_config, &client);
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
+        let final_progress = progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
     }
 
@@ -401,9 +404,13 @@ mod tests {
                 e
             })
             .unwrap();
-        let (fut, res) = album.download(&download_config, &client);
+        let (fut, progress_rx) = album.download(&download_config, &client);
         fut.await.unwrap();
-        let final_progress = res.progress_rx.await.unwrap().borrow().clone();
-        assert!(final_progress.position == final_progress.total - 1);
+        let rx = progress_rx.await.unwrap();
+        let (final_position, total) = {
+            let final_progress = rx.borrow();
+            (final_progress.position, final_progress.total)
+        };
+        assert!(final_position == total - 1);
     }
 }
