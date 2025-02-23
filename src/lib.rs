@@ -1,3 +1,5 @@
+#![feature(type_changing_struct_update)]
+
 pub mod auth;
 pub mod downloader;
 pub mod quality;

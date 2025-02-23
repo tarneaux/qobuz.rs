@@ -1,3 +1,4 @@
+use super::{Album, Array, Artist, Playlist, Track};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -40,3 +41,47 @@ impl<'de> Deserialize<'de> for Empty {
         Ok(Self)
     }
 }
+
+pub trait ExtraTwins {}
+pub trait ExtraExtract {
+    type EF;
+}
+
+macro_rules! extra_utils {
+    (
+        $t:ident,
+        [$( $extra_field:ident: $extra_type:ty ),+]
+    ) => {
+        impl ExtraTwins for ($t<WithoutExtra>, $t<WithExtra>) {}
+        impl ExtraTwins for ($t<WithExtra>, $t<WithoutExtra>) {}
+        impl<EF> ExtraExtract for $t<EF>
+        where
+            $( EF: ExtraFlag<$extra_type>, )+
+        {
+            type EF = EF;
+        }
+        impl $t<WithExtra> {
+            #[must_use]
+            pub fn without_extra(self) -> $t<WithoutExtra> {
+                $t {
+                    $( $extra_field: Empty, )+
+                    ..self
+                }
+            }
+        }
+        impl $t<WithoutExtra> {
+            #[must_use]
+            pub fn with_extra(self, $( $extra_field: $extra_type ),+ ) -> $t<WithExtra> {
+                $t {
+                    $( $extra_field, )+
+                    ..self
+                }
+            }
+        }
+    };
+}
+
+extra_utils!(Track, [album: Album<WithoutExtra>]);
+extra_utils!(Album, [tracks: Array<Track<WithoutExtra>>]);
+extra_utils!(Playlist, [tracks: Array<Track<WithExtra>>]);
+extra_utils!(Artist, [tracks: Array<Track<WithExtra>>, albums: Array<Album<WithoutExtra>>]);

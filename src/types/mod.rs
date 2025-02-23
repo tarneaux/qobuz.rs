@@ -6,6 +6,7 @@ pub mod traits;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use extra::{ExtraFlag, WithExtra, WithoutExtra};
+use paste::paste;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt::Display, time::Duration};
@@ -223,65 +224,41 @@ impl Display for Performer {
     }
 }
 
-pub trait QobuzType {
-    type EF;
+pub trait QobuzType: extra::ExtraExtract {
     #[must_use]
     fn name_singular<'b>() -> &'b str;
     #[must_use]
     fn name_plural<'b>() -> &'b str;
 }
 
-impl<EF> QobuzType for Album<EF>
-where
-    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
-{
-    type EF = EF;
-    fn name_singular<'b>() -> &'b str {
-        "album"
-    }
-    fn name_plural<'b>() -> &'b str {
-        "albums"
-    }
+macro_rules! impl_qobuz_type {
+    (
+        $t:ident,
+        [$( $extra_type:ty ),+]
+    ) => {
+        paste! {
+            impl<EF> QobuzType for $t<EF>
+            where
+                $( EF: ExtraFlag<$extra_type>, )+
+            {
+                fn name_singular<'b>() -> &'b str {
+                    stringify!{[<$t:lower>]}
+                }
+                fn name_plural<'b>() -> &'b str {
+                    stringify!{[<$t:lower s>]}
+                }
+            }
+        }
+    };
 }
 
-impl<EF> QobuzType for Track<EF>
-where
-    EF: ExtraFlag<Album<WithoutExtra>>,
-{
-    type EF = EF;
-    fn name_singular<'b>() -> &'b str {
-        "track"
-    }
-    fn name_plural<'b>() -> &'b str {
-        "tracks"
-    }
-}
-
-impl<EF> QobuzType for Artist<EF>
-where
-    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
-{
-    type EF = EF;
-    fn name_singular<'b>() -> &'b str {
-        "artist"
-    }
-    fn name_plural<'b>() -> &'b str {
-        "artists"
-    }
-}
-
-impl<EF> QobuzType for Playlist<EF>
-where
-    EF: ExtraFlag<Array<Track<WithExtra>>>,
-{
-    type EF = EF;
-    fn name_singular<'b>() -> &'b str {
-        "playlist"
-    }
-    fn name_plural<'b>() -> &'b str {
-        "playlists"
-    }
-}
+impl_qobuz_type!(Album, [Array<Track<WithoutExtra>>]);
+impl_qobuz_type!(Track, [Album<WithoutExtra>]);
+impl_qobuz_type!(
+    Artist,
+    [Array<Track<WithExtra>>, Array<Album<WithoutExtra>>]
+);
+impl_qobuz_type!(Playlist, [Array<Track<WithExtra>>]);
 
 mod ser_datetime_i64 {
     use chrono::{DateTime, Utc};
