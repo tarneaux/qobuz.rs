@@ -3,13 +3,13 @@ use crate::{
     types::{
         extra::{ExtraFlag, WithExtra, WithoutExtra},
         traits::RootEntity,
-        Album, Array, Playlist, Track,
+        Album, Array, Playlist, QobuzType, Track,
     },
     ApiError,
 };
 use futures::{Future, StreamExt};
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fmt::Debug,
     io::Write,
     os::unix::ffi::OsStrExt,
@@ -78,61 +78,6 @@ impl DownloadConfig {
     pub fn rebuild(self) -> DownloadConfigBuilder {
         self.into()
     }
-
-    /// Write an M3U file for a playlist with a certain `name`, containing the already downloaded
-    /// tracks `track_paths`, returning the new M3U file's path.
-    pub fn write_m3u(
-        &self,
-        playlist: &Playlist<WithExtra>,
-        track_paths: &[PathBuf],
-    ) -> Result<PathBuf, DownloadError> {
-        let m3u_path = self.get_m3u_path(playlist);
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .create_new(!self.overwrite) // (Shadows create and truncate)
-            .open(&m3u_path)?;
-        let track_paths = track_paths
-            .iter()
-            .map(|p| Ok(p.strip_prefix(&self.root_dir)?.as_os_str()))
-            .collect::<Result<Vec<&OsStr>, std::path::StripPrefixError>>()?;
-        let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
-        file.write_all(track_paths.as_encoded_bytes())?;
-
-        Ok(m3u_path)
-    }
-
-    pub fn get_album_path<EF>(&self, album: &Album<EF>) -> PathBuf
-    where
-        EF: ExtraFlag<Array<Track<WithoutExtra>>>,
-    {
-        let mut path = self.root_dir.to_path_buf();
-        path.push(sanitize_filename(
-            &self.path_format.get_album_dir(album, &self.quality),
-        ));
-        path
-    }
-
-    pub fn get_track_path<EF>(&self, track: &Track<EF>, album_path: &Path) -> PathBuf
-    where
-        EF: ExtraFlag<Album<WithoutExtra>>,
-    {
-        let mut path = album_path.to_path_buf();
-        path.push(format!(
-            "{}.{}",
-            sanitize_filename(&self.path_format.get_track_file_basename(track)),
-            FileExtension::from(&self.quality)
-        ));
-        path
-    }
-
-    #[must_use]
-    pub fn get_m3u_path(&self, playlist: &Playlist<WithExtra>) -> PathBuf {
-        let mut path = self.m3u_dir.to_path_buf();
-        path.push(format!("{}.m3u", sanitize_filename(&playlist.name)));
-        path
-    }
 }
 
 pub trait Download: RootEntity {
@@ -179,9 +124,9 @@ impl Download for Track<WithExtra> {
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
         let fut = async move {
-            let album_path = download_config.get_album_path(&self.album);
-            let path = download_config.get_track_path(self, &album_path);
+            let album_path = self.album.get_path(download_config);
             std::fs::create_dir_all(&album_path)?;
+            let path = self.get_path(download_config);
 
             let mut out = match OpenOptions::new()
                 .write(true)
@@ -281,7 +226,6 @@ pub struct PlaylistPathInfo {
     pub m3u_path: PathBuf,
 }
 
-// TODO: Deduplicate implementations
 impl Download for Playlist<WithExtra> {
     type ProgressType = ArrayDownloadProgress;
     type PathInfoType = PlaylistPathInfo;
@@ -302,7 +246,7 @@ impl Download for Playlist<WithExtra> {
             download_tracks(tracks, download_config, client, progress_tx)
                 .await
                 .and_then(|track_paths| {
-                    let m3u_path = download_config.write_m3u(self, track_paths.as_ref())?;
+                    let m3u_path = write_m3u(self, download_config)?;
                     Ok(PlaylistPathInfo {
                         track_paths,
                         m3u_path,
@@ -312,6 +256,79 @@ impl Download for Playlist<WithExtra> {
 
         (fut, progress_rx)
     }
+}
+
+pub trait GetPath: QobuzType {
+    fn get_path(&self, download_config: &DownloadConfig) -> PathBuf;
+}
+
+impl GetPath for Track<WithExtra> {
+    fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
+        let mut path = self.album.get_path(download_config);
+        path.push(format!(
+            "{}.{}",
+            sanitize_filename(&download_config.path_format.get_track_file_basename(self)),
+            FileExtension::from(&download_config.quality)
+        ));
+        path
+    }
+}
+
+impl<EF> GetPath for Album<EF>
+where
+    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+{
+    fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
+        let mut path = download_config.root_dir.to_path_buf();
+        path.push(sanitize_filename(
+            &download_config
+                .path_format
+                .get_album_dir(self, &download_config.quality),
+        ));
+        path
+    }
+}
+
+impl<EF> GetPath for Playlist<EF>
+where
+    EF: ExtraFlag<Array<Track<WithExtra>>>,
+{
+    fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
+        let mut path = download_config.m3u_dir.to_path_buf();
+        path.push(format!("{}.m3u", sanitize_filename(&self.name)));
+        path
+    }
+}
+
+/// Writes the m3u file for the specified playlist, without downloading the tracks.
+#[allow(clippy::missing_panics_doc)]
+pub fn write_m3u(
+    playlist: &Playlist<WithExtra>,
+    download_config: &DownloadConfig,
+) -> Result<PathBuf, std::io::Error> {
+    let m3u_path = playlist.get_path(download_config);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .create_new(!download_config.overwrite) // (Shadows create and truncate)
+        .open(&m3u_path)?;
+    let track_paths = playlist
+        .tracks
+        .items
+        .iter()
+        .map(|p| {
+            p.get_path(download_config)
+                .strip_prefix(&download_config.root_dir)
+                .expect("Path is relative to root")
+                .as_os_str()
+                .to_owned()
+        })
+        .collect::<Vec<OsString>>();
+    let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
+    file.write_all(track_paths.as_encoded_bytes())?;
+
+    Ok(m3u_path)
 }
 
 #[derive(Debug, Error)]
@@ -324,8 +341,6 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
-    #[error("Failed to strip prefix from path: `{0}`")]
-    PathStripPrefixError(#[from] std::path::StripPrefixError),
 }
 
 builder! {
