@@ -1,7 +1,8 @@
 use crate::{
     quality::{FileExtension, Quality},
     types::{
-        extra::{ExtraFlag, RootEntity, WithExtra, WithoutExtra},
+        extra::{ExtraFlag, WithExtra, WithoutExtra},
+        traits::RootEntity,
         Album, Array, Playlist, Track,
     },
     ApiError,

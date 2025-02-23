@@ -1,43 +1,6 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Debug;
 
-use super::{Album, Artist, Playlist, Track};
-
-pub trait RootEntity {
-    fn extra_arg<'b>() -> &'b str;
-}
-
-impl RootEntity for Track<WithExtra> {
-    fn extra_arg<'b>() -> &'b str {
-        ""
-    }
-}
-
-impl RootEntity for Album<WithExtra> {
-    fn extra_arg<'b>() -> &'b str {
-        ""
-    }
-}
-
-impl RootEntity for Artist<WithExtra> {
-    fn extra_arg<'b>() -> &'b str {
-        "tracks,albums"
-    }
-}
-
-impl RootEntity for Playlist<WithExtra> {
-    fn extra_arg<'b>() -> &'b str {
-        "tracks"
-    }
-}
-
-pub trait ImplicitExtra {}
-
-impl ImplicitExtra for Track<WithExtra> {}
-impl ImplicitExtra for Album<WithoutExtra> {}
-impl ImplicitExtra for Artist<WithoutExtra> {}
-impl ImplicitExtra for Playlist<WithExtra> {}
-
 pub trait ExtraFlag<T> {
     type Extra: DeserializeOwned + Serialize + Eq + Clone + Debug;
 }

@@ -10,8 +10,8 @@ use crate::{
     auth::{get_user_auth_token, Credentials, LoginError},
     quality::Quality,
     types::{
-        extra::{RootEntity, WithExtra, WithoutExtra},
-        traits::Favoritable,
+        extra::{WithExtra, WithoutExtra},
+        traits::{Favoritable, RootEntity},
         Album, Array, Artist, Playlist, QobuzType, Track,
     },
 };
