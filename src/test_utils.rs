@@ -1,11 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::{
-    auth::Credentials,
-    downloader::{path_format::PathFormat, Downloader},
-    quality::Quality,
-    Client,
-};
+use crate::{auth::Credentials, downloader::DownloadOptions, Client};
 use std::path::Path;
 
 pub async fn make_client() -> Client {
@@ -16,25 +11,17 @@ pub async fn make_client() -> Client {
         .expect("Couldn't create client with environment secrets")
 }
 
-pub async fn make_client_and_downloader() -> (Client, Downloader) {
-    let music_path = Path::new("music");
-    let playlist_path = Path::new("music/playlists");
+pub fn make_download_options() -> DownloadOptions {
+    let root_dir: &Path = Path::new("music");
+    let m3u_dir = Path::new("music/playlists");
 
-    if !playlist_path.is_dir() {
-        std::fs::create_dir_all(playlist_path).unwrap();
+    if !m3u_dir.is_dir() {
+        std::fs::create_dir_all(m3u_dir).unwrap();
     }
 
-    let client = make_client().await;
-    (
-        client.clone(),
-        Downloader::new(
-            client,
-            music_path,
-            playlist_path,
-            Quality::Cd,
-            true,
-            PathFormat::default(),
-        )
-        .unwrap(),
-    )
+    DownloadOptions::builder(root_dir)
+        .m3u_dir(m3u_dir.into())
+        .overwrite(true)
+        .build()
+        .unwrap()
 }

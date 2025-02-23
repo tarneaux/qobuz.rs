@@ -5,8 +5,7 @@ const DIR: &str = "music";
 use futures::{stream, StreamExt};
 use qobuz::{
     auth::Credentials,
-    downloader::{path_format::PathFormat, Download, Downloader},
-    quality::Quality,
+    downloader::{Download, DownloadOptions},
     types::{extra::WithExtra, Track},
     Client,
 };
@@ -28,15 +27,7 @@ async fn main() {
         .filter(|t| t.streamable)
         .collect();
 
-    let downloader = Downloader::new(
-        client.clone(),
-        Path::new(DIR),
-        Path::new(&format!("{DIR}/playlists")),
-        Quality::Cd,
-        false,
-        PathFormat::default(),
-    )
-    .unwrap();
+    let downloader = DownloadOptions::builder(Path::new(DIR)).build().unwrap();
 
     let n = tracks.len();
     let v = vec![None; n];
@@ -51,7 +42,7 @@ async fn main() {
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
                 println!("{}/{}: {}", i + 1, n, t.title);
-                let (fut, res) = t.download(&downloader);
+                let (fut, res) = t.download(&downloader, &client);
                 tokio::spawn(async move {
                     let mut rx = res.progress_rx.await.unwrap().expect("No status returned");
                     while rx.changed().await.is_ok() {

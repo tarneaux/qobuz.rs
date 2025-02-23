@@ -23,6 +23,12 @@ impl Display for Quality {
     }
 }
 
+impl Default for Quality {
+    fn default() -> Self {
+        Self::Cd
+    }
+}
+
 impl TryFrom<u8> for Quality {
     type Error = InvalidQualityError;
     fn try_from(value: u8) -> Result<Self, Self::Error> {

@@ -17,7 +17,7 @@ use std::{
 use thiserror::Error;
 use tokio::{
     fs::OpenOptions,
-    sync::{mpsc, oneshot, watch},
+    sync::{oneshot, watch},
 };
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
@@ -25,69 +25,56 @@ pub mod path_format;
 use path_format::PathFormat;
 
 mod delayed_watch;
+#[macro_use]
+mod builder;
 
+/// Options for downloads.
+///
+/// * `client` - Will be used to query information and download URLs.
+/// * `root` - Download root directory.
+/// * `m3u_dir` - Directory where to put m3u files.
+/// * `quality` - Quality to download at.
+/// * `overwrite` - Whether to overwrite existing files.
+/// * `path_format` - The path format for tracks and albums
+///
+/// # Example
+///
+/// ```
+/// # use tokio_test;
+/// # tokio_test::block_on(async {
+/// use qobuz::{
+///     auth::Credentials,
+///     Client,
+///     downloader::{DownloadOptions, path_format::PathFormat},
+///     quality::Quality
+/// };
+/// use std::path::Path;
+/// let credentials = Credentials::from_env().unwrap();
+/// let client = Client::new(credentials).await.unwrap();
+/// let opts = DownloadOptions::builder(Path::new("music"))
+///     .quality(Quality::Mp3)
+///     .overwrite(true)
+///     .build()
+///     .unwrap();
+/// # })
+/// ```
 #[derive(Debug, Clone)]
-pub struct Downloader {
-    client: crate::Client,
-    root: Box<Path>,
+pub struct DownloadOptions {
+    root_dir: Box<Path>,
     m3u_dir: Box<Path>,
     quality: Quality,
     overwrite: bool,
     path_format: PathFormat,
 }
 
-impl Downloader {
-    /// Create a new `Downloader` which will use the given `client` to download to the given
-    /// `root`, putting m3u playlist files in `m3u_dir`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use tokio_test;
-    /// # tokio_test::block_on(async {
-    /// use qobuz::{
-    ///     auth::Credentials,
-    ///     Client,
-    ///     downloader::{Downloader, path_format::PathFormat},
-    ///     quality::Quality
-    /// };
-    /// use std::path::Path;
-    /// let credentials = Credentials::from_env().unwrap();
-    /// let client = Client::new(credentials).await.unwrap();
-    /// let downloader = Downloader::new(
-    ///     client,
-    ///     Path::new("music"),
-    ///     Path::new("music/playlists"),
-    ///     Quality::Mp3,
-    ///     true, // Overwrite files
-    ///     PathFormat::default(),
-    /// ).unwrap();
-    /// # })
-    /// ```
-    pub fn new(
-        client: crate::Client,
-        root: &Path,
-        m3u_dir: &Path,
-        quality: Quality,
-        overwrite: bool,
-        path_format: PathFormat,
-    ) -> Result<Self, NonExistentDirectoryError> {
-        let root: Box<Path> = root.into();
-        let m3u_dir: Box<Path> = m3u_dir.into();
-        if !root.is_dir() {
-            return Err(NonExistentDirectoryError::Root(root));
-        }
-        if !m3u_dir.is_dir() {
-            return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
-        }
-        Ok(Self {
-            client,
-            root,
-            m3u_dir,
-            quality,
-            overwrite,
-            path_format,
-        })
+impl DownloadOptions {
+    pub fn builder(root_dir: impl Into<Box<Path>>) -> DownloadOptionsBuilder {
+        DownloadOptionsBuilder::new(root_dir.into())
+    }
+
+    #[must_use]
+    pub fn rebuild(self) -> DownloadOptionsBuilder {
+        self.into()
     }
 
     /// Write an M3U file for a playlist with a certain `name`, containing the already downloaded
@@ -105,7 +92,7 @@ impl Downloader {
             .open(&m3u_path)?;
         let track_paths = track_paths
             .iter()
-            .map(|p| Ok(p.strip_prefix(&self.root)?.as_os_str()))
+            .map(|p| Ok(p.strip_prefix(&self.root_dir)?.as_os_str()))
             .collect::<Result<Vec<&OsStr>, std::path::StripPrefixError>>()?;
         let track_paths = track_paths.join(OsStr::from_bytes(b"\n"));
         file.write_all(track_paths.as_encoded_bytes())?;
@@ -113,58 +100,11 @@ impl Downloader {
         Ok(m3u_path)
     }
 
-    async fn download_track<EF>(
-        &self,
-        track: &Track<EF>,
-        path: &Path,
-        progress_tx: mpsc::Sender<TrackDownloadProgress>,
-    ) -> Result<(), DownloadError>
-    where
-        EF: ExtraFlag<Album<WithoutExtra>>,
-        for<'a> &'a Track<EF>: Send,
-    {
-        let mut out = match OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .create_new(!self.overwrite) // (Shadows create and truncate)
-            .open(&path)
-            .await // TODO: Is async better than sync (isn't sync faster ?)
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return match e.kind() {
-                    // TODO: Remove when using temp files
-                    std::io::ErrorKind::AlreadyExists => Ok(()),
-                    _ => Err(DownloadError::IoError(e)),
-                };
-            }
-        };
-        let (mut bytes_stream, content_length) = self
-            .client
-            .stream_track(&track.id.to_string(), self.quality.clone())
-            .await?;
-        let mut downloaded: u64 = 0;
-        while let Some(item) = bytes_stream.next().await {
-            let item = item?;
-            tokio::io::copy(&mut item.as_ref(), &mut out).await?;
-            downloaded += item.len() as u64;
-            progress_tx
-                .send(TrackDownloadProgress {
-                    downloaded,
-                    total: content_length,
-                })
-                .await
-                .expect("The mpsc will never be closed on the receiving side");
-        }
-        Ok(())
-    }
-
     pub fn get_album_path<EF>(&self, album: &Album<EF>) -> PathBuf
     where
         EF: ExtraFlag<Array<Track<WithoutExtra>>>,
     {
-        let mut path = self.root.to_path_buf();
+        let mut path = self.root_dir.to_path_buf();
         path.push(sanitize_filename(
             &self.path_format.get_album_dir(album, &self.quality),
         ));
@@ -197,7 +137,8 @@ pub trait Download: RootEntity {
 
     fn download(
         &self,
-        downloader: &Downloader,
+        download_options: &DownloadOptions,
+        client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
@@ -229,13 +170,14 @@ impl Download for Track<WithExtra> {
     /// Download and tag a track, returning the download locations of the album and track.
     fn download(
         &self,
-        downloader: &Downloader,
+        download_options: &DownloadOptions,
+        client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
     ) {
-        let album_path = downloader.get_album_path(&self.album);
-        let path = downloader.get_track_path(self, &album_path);
+        let album_path = download_options.get_album_path(&self.album);
+        let path = download_options.get_track_path(self, &album_path);
 
         let (progress_tx, progress_rx) = delayed_watch::channel();
 
@@ -243,7 +185,41 @@ impl Download for Track<WithExtra> {
             let path = path.clone();
             async move {
                 std::fs::create_dir_all(&album_path)?;
-                downloader.download_track(self, &path, progress_tx).await?;
+
+                let mut out = match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .create_new(!download_options.overwrite) // (Shadows create and truncate)
+                    .open(&path)
+                    .await
+                {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return match e.kind() {
+                            // TODO: Remove when using temp files
+                            std::io::ErrorKind::AlreadyExists => Ok(()),
+                            _ => Err(DownloadError::IoError(e)),
+                        };
+                    }
+                };
+                let (mut bytes_stream, content_length) = client
+                    .stream_track(&self.id.to_string(), download_options.quality.clone())
+                    .await?;
+                let mut downloaded: u64 = 0;
+                while let Some(item) = bytes_stream.next().await {
+                    let item = item?;
+                    tokio::io::copy(&mut item.as_ref(), &mut out).await?;
+                    downloaded += item.len() as u64;
+                    progress_tx
+                        .send(TrackDownloadProgress {
+                            downloaded,
+                            total: content_length,
+                        })
+                        .await
+                        .expect("The mpsc will never be closed on the receiving side");
+                }
+
                 tag_track(self, &path, &self.album).await?;
 
                 Ok(())
@@ -259,7 +235,8 @@ impl Download for Album<WithExtra> {
 
     fn download(
         &self,
-        downloader: &Downloader,
+        download_options: &DownloadOptions,
+        client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
@@ -271,8 +248,8 @@ impl Download for Album<WithExtra> {
         let fut = async move {
             for (i, track) in tracks.iter().enumerate() {
                 // TODO: Make Track<WithExtra> without the redundant API query
-                let track = downloader.client.get_track(&track.id.to_string()).await?;
-                let (fut, res) = track.download(downloader);
+                let track = client.get_track(&track.id.to_string()).await?;
+                let (fut, res) = track.download(download_options, client);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
@@ -289,7 +266,7 @@ impl Download for Album<WithExtra> {
             Ok(())
         };
 
-        let path = downloader.get_album_path(self);
+        let path = download_options.get_album_path(self);
         (fut, DownloadInfo { path, progress_rx })
     }
 }
@@ -300,7 +277,8 @@ impl Download for Playlist<WithExtra> {
 
     fn download(
         &self,
-        downloader: &Downloader,
+        download_options: &DownloadOptions,
+        client: &crate::Client,
     ) -> (
         impl Future<Output = Result<(), DownloadError>>,
         DownloadInfo<Self::ProgressType>,
@@ -312,9 +290,7 @@ impl Download for Playlist<WithExtra> {
         let fut = async move {
             let mut track_paths: Vec<PathBuf> = vec![];
             for (i, track) in tracks.iter().enumerate() {
-                // TODO: Make Track<WithExtra> without the redundant API query
-                let track = downloader.client.get_track(&track.id.to_string()).await?;
-                let (fut, res) = track.download(downloader);
+                let (fut, res) = track.download(download_options, client);
 
                 progress_tx
                     .send(ArrayDownloadProgress {
@@ -329,11 +305,11 @@ impl Download for Playlist<WithExtra> {
                 fut.await?;
                 track_paths.push(res.path);
             }
-            downloader.write_m3u(self, &track_paths)?;
+            download_options.write_m3u(self, &track_paths)?;
             Ok(())
         };
 
-        let path = downloader.get_m3u_path(self);
+        let path = download_options.get_m3u_path(self);
         (fut, DownloadInfo { path, progress_rx })
     }
 }
@@ -352,10 +328,34 @@ pub enum DownloadError {
     PathStripPrefixError(#[from] std::path::StripPrefixError),
 }
 
+builder! {
+    DownloadOptionsBuilder, DownloadOptions, {
+        required: {
+            root_dir: Box<Path>,
+        },
+        default: {
+            m3u_dir: Box<Path> = root_dir.to_path_buf().join("playlists").into(),
+            quality: Quality = Quality::default(),
+            overwrite: bool = false,
+            path_format: PathFormat = PathFormat::default(),
+        }
+    },
+    {
+        if !root_dir.exists() {
+            return Err(NonExistentDirectoryError::RootDir(root_dir));
+        }
+        if !m3u_dir.exists() {
+            return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
+        }
+        Ok(())
+    },
+    NonExistentDirectoryError
+}
+
 #[derive(Debug, Error)]
 pub enum NonExistentDirectoryError {
-    #[error("Non existent root download directory `{0}`")]
-    Root(Box<Path>),
+    #[error("Non existent download root directory `{0}`")]
+    RootDir(Box<Path>),
     #[error("Non existent m3u directory `{0}`")]
     M3uDir(Box<Path>),
 }
@@ -370,16 +370,16 @@ pub fn sanitize_filename(filename: &str) -> String {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    use crate::test_utils::make_client_and_downloader;
+    use crate::test_utils::{make_client, make_download_options};
     use tokio::test;
 
     const HIRES192_TRACK: &str = "18893849"; // Creedence Clearwater Revival - Lodi
 
     #[test]
     async fn test_download_track() {
-        let (client, downloader) = make_client_and_downloader().await;
+        let (client, download_options) = (make_client().await, make_download_options());
         let track = client.get_track(HIRES192_TRACK).await.unwrap();
-        let (fut, res) = track.download(&downloader);
+        let (fut, res) = track.download(&download_options, &client);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     async fn test_download_album() {
-        let (client, downloader) = make_client_and_downloader().await;
+        let (client, download_options) = (make_client().await, make_download_options());
         let album = client
             .get_album("lz75qrx8pnjac")
             .await
@@ -396,7 +396,7 @@ mod tests {
                 e
             })
             .unwrap();
-        let (fut, res) = album.download(&downloader);
+        let (fut, res) = album.download(&download_options, &client);
         fut.await.unwrap();
         let final_progress = res.progress_rx.await.unwrap().unwrap().borrow().clone();
         assert!(final_progress.position == final_progress.total - 1);
