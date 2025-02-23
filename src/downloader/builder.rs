@@ -1,24 +1,22 @@
 macro_rules! builder {
     (
         $(#[$outer:meta])*
-        $target:ident,
-        {
-            required: { $($req_field:ident : $req_ty:ty = $req_arg_ty:ty => $req_arg_conv_fn:expr),* $(,)? },
+        $target:ident {
+            provided: { $($provided_field:ident : $provided_ty:ty = $provided_arg_ty:ty => $provided_conv_fn:expr),* $(,)? },
             default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
         },
-        $verify:block,
-        $verify_err:ty
+        verify: Result<(), $verify_err:ty> = $verify:block
     ) => {
         paste::paste! {
             $(#[$outer])*
             pub struct $target {
-                $($req_field: $req_ty,)*
+                $($provided_field: $provided_ty,)*
                 $($def_field: $def_ty,)*
             }
 
             impl $target {
-                pub fn builder($($req_field: $req_arg_ty),*) -> [<$target Builder>] {
-                    [<$target Builder>]::new($($req_field),*)
+                pub fn builder($($provided_field: $provided_arg_ty),*) -> [<$target Builder>] {
+                    [<$target Builder>]::new($($provided_field),*)
                 }
 
                 #[must_use]
@@ -28,38 +26,39 @@ macro_rules! builder {
             }
 
             pub struct [<$target Builder>] {
-                $($req_field: $req_ty,)*
+                $($provided_field: $provided_ty,)*
                 $($def_field: $def_ty,)*
             }
 
             impl [<$target Builder>] {
                 #[must_use]
-                pub fn new($($req_field: $req_arg_ty),*) -> Self {
-                    $(let $req_field: $req_ty = $req_arg_conv_fn;)*
+                pub fn new($($provided_field: $provided_arg_ty),*) -> Self {
+                    $(let $provided_field: $provided_ty = $provided_conv_fn;)*
                     // This assignment is done separately to allow computing default values based
                     // on required fields
                     $(let $def_field = $def_value;)*
                     Self {
-                        $($req_field,)*
+                        $($provided_field,)*
                         $($def_field,)*
                     }
                 }
 
                 pub fn build(self) -> Result<$target, $verify_err> {
-                    $(let $req_field = self.$req_field;)*
+                    $(let $provided_field = self.$provided_field;)*
                     $(let $def_field = self.$def_field;)*
-                    $verify?;
+                    let verify: Result<(), $verify_err> = $verify;
+                    verify?;
                     Ok($target {
-                        $($req_field: $req_field,)*
+                        $($provided_field: $provided_field,)*
                         $($def_field: $def_field,)*
                     })
                 }
 
                 $(
                     #[must_use]
-                    pub fn $req_field(self, value: $req_ty) -> Self {
+                    pub fn $provided_field(self, value: $provided_ty) -> Self {
                         Self {
-                            $req_field: value,
+                            $provided_field: value,
                             ..self
                         }
                     }
@@ -79,7 +78,7 @@ macro_rules! builder {
             impl From<$target> for [<$target Builder>] {
                 fn from(value: $target) -> Self {
                     Self {
-                        $($req_field: value.$req_field),*,
+                        $($provided_field: value.$provided_field),*,
                         $($def_field: value.$def_field),*
                     }
                 }

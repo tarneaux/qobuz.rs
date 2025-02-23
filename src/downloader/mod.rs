@@ -60,9 +60,8 @@ builder! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    DownloadConfig,
-    {
-        required: {
+    DownloadConfig {
+        provided: {
             root_dir: PathBuf = impl Into<PathBuf> => root_dir.into(),
         },
         default: {
@@ -72,7 +71,7 @@ builder! {
             path_format: PathFormat = PathFormat::default(),
         }
     },
-    {
+    verify: Result<(), NonExistentDirectoryError> = {
         if !root_dir.exists() {
             return Err(NonExistentDirectoryError::RootDir(root_dir));
         }
@@ -80,8 +79,7 @@ builder! {
             return Err(NonExistentDirectoryError::M3uDir(m3u_dir));
         }
         Ok(())
-    },
-    NonExistentDirectoryError
+    }
 }
 
 pub trait Download: RootEntity {
