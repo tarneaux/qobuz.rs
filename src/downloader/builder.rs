@@ -1,8 +1,15 @@
 macro_rules! builder {
-    ($builder:ident, $target:ident, {
-        required: { $($req_field:ident : $req_ty:ty),* $(,)? },
-        default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
-    }, $verify:block, $verify_err:ty) => {
+    (
+        $(#[$outer:meta])* $builder:ident,
+        $target:ident,
+        {
+            required: { $($req_field:ident : $req_ty:ty),* $(,)? },
+            default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
+        },
+        $verify:block,
+        $verify_err:ty
+    ) => {
+        $(#[$outer])*
         pub struct $builder {
             $($req_field: $req_ty,)*
             $($def_field: $def_ty,)*

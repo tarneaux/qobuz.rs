@@ -329,7 +329,16 @@ pub enum DownloadError {
 }
 
 builder! {
-    DownloadConfigBuilder, DownloadConfig, {
+    /// A builder for `DownloadConfig`.
+    ///
+    /// * `root_dir` and `m3u_dir` - Where tracks and playlists are saved. By default, `m3u_dir`
+    /// will be set to `{root_dir}/playlists`.
+    /// * `quality` - The quality at which tracks are downloaded.
+    /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
+    /// * `path_format` - The format options for file names.
+    DownloadConfigBuilder,
+    DownloadConfig,
+    {
         required: {
             root_dir: Box<Path>,
         },
