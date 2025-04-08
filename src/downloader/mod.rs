@@ -131,23 +131,28 @@ impl Download for Track<WithExtra> {
             std::fs::create_dir_all(&album_path)?;
             let path = self.get_path(download_config);
 
-            let mut out = match OpenOptions::new()
+            if !download_config.overwrite && path.try_exists()? {
+                return Ok(path);
+            }
+
+            let tmp_file_name = {
+                let mut s = path
+                    .file_stem()
+                    .expect("File name is nonempty")
+                    .to_os_string();
+                s.push(OsString::from(".tmp."));
+                s.push(path.extension().expect("Extension is nonempty"));
+                s
+            };
+
+            let tmp_path = path.with_file_name(tmp_file_name);
+
+            let mut out = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .create_new(!download_config.overwrite) // (Shadows create and truncate)
-                .open(&path)
-                .await
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    return match e.kind() {
-                        // TODO: Remove when using temp files
-                        std::io::ErrorKind::AlreadyExists => Ok(path),
-                        _ => Err(DownloadError::IoError(e)),
-                    };
-                }
-            };
+                .open(&tmp_path)
+                .await?;
             let (mut bytes_stream, content_length) = client
                 .stream_track(&self.id.to_string(), download_config.quality.clone())
                 .await?;
@@ -165,7 +170,9 @@ impl Download for Track<WithExtra> {
                     .expect("The mpsc will never be closed on the receiving side");
             }
 
-            tag_track(self, &path, &self.album).await?;
+            tag_track(self, &tmp_path, &self.album).await?;
+
+            std::fs::rename(&tmp_path, &path)?;
 
             Ok(path)
         };
