@@ -2,7 +2,7 @@ use super::{Album, Array, Artist, Playlist, Track};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Debug;
 
-pub trait ExtraFlag<T> {
+pub trait ExtraFlag<T>: std::fmt::Debug {
     type Extra: DeserializeOwned + Serialize + Eq + Clone + Debug;
 }
 

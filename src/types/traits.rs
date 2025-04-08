@@ -1,6 +1,6 @@
 use super::{
     extra::{WithExtra, WithoutExtra},
-    Album, Artist, Playlist, Track,
+    Album, Artist, Playlist, QobuzType, Track,
 };
 
 pub trait Favoritable: ImplicitExtra {}
@@ -9,8 +9,10 @@ impl Favoritable for Track<WithExtra> {}
 impl Favoritable for Album<WithoutExtra> {}
 impl Favoritable for Artist<WithoutExtra> {}
 
-pub trait RootEntity {
-    fn extra_arg<'b>() -> &'b str;
+pub trait RootEntity: QobuzType {
+    fn extra_arg<'b>() -> &'b str
+    where
+        Self: Sized;
 }
 
 impl RootEntity for Track<WithExtra> {
@@ -37,9 +39,14 @@ impl RootEntity for Playlist<WithExtra> {
     }
 }
 
-pub trait ImplicitExtra {}
+pub trait ImplicitExtra: QobuzType {}
 
 impl ImplicitExtra for Track<WithExtra> {}
 impl ImplicitExtra for Album<WithoutExtra> {}
 impl ImplicitExtra for Artist<WithoutExtra> {}
 impl ImplicitExtra for Playlist<WithExtra> {}
+
+pub trait Downloadable: QobuzType {}
+impl Downloadable for Playlist<WithExtra> {}
+impl Downloadable for Album<WithExtra> {}
+impl Downloadable for Track<WithExtra> {}

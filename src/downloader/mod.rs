@@ -83,8 +83,8 @@ builder! {
 }
 
 pub trait Download: RootEntity {
-    type ProgressType: Debug;
-    type PathInfoType: Debug;
+    type ProgressType: Progress + Send + Sync + 'static;
+    type PathInfoType: Debug + Send + Sync + 'static;
 
     #[must_use]
     fn download(
@@ -92,9 +92,17 @@ pub trait Download: RootEntity {
         download_config: &DownloadConfig,
         client: &crate::Client,
     ) -> (
-        impl Future<Output = Result<Self::PathInfoType, DownloadError>>,
+        impl Future<Output = Result<Self::PathInfoType, DownloadError>> + Send,
         DelayedWatchReceiver<Self::ProgressType>,
     );
+}
+
+pub trait Progress: Debug {
+    fn progress_numerator(&self) -> u64;
+    fn progress_denominator(&self) -> u64;
+    fn progress_percentage(&self) -> u64 {
+        self.progress_numerator() * 100 / self.progress_denominator()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -103,12 +111,36 @@ pub struct TrackDownloadProgress {
     pub total: u64,
 }
 
+impl Progress for TrackDownloadProgress {
+    fn progress_numerator(&self) -> u64 {
+        self.downloaded
+    }
+    fn progress_denominator(&self) -> u64 {
+        self.total
+    }
+}
+
 #[derive(Debug)]
 pub struct ArrayDownloadProgress {
-    pub current: Track<WithExtra>,
-    pub position: usize,
+    pub current_item: Track<WithExtra>,
+    pub current_index: usize,
     pub total: usize,
     pub track_progress_rx: oneshot::Receiver<watch::Receiver<TrackDownloadProgress>>,
+}
+
+impl ArrayDownloadProgress {
+    const fn downloaded(&self) -> usize {
+        self.current_index - 1
+    }
+}
+
+impl Progress for ArrayDownloadProgress {
+    fn progress_numerator(&self) -> u64 {
+        self.downloaded() as u64
+    }
+    fn progress_denominator(&self) -> u64 {
+        self.total as u64
+    }
 }
 
 impl Download for Track<WithExtra> {
@@ -193,8 +225,8 @@ async fn download_tracks(
 
         progress_tx
             .send(ArrayDownloadProgress {
-                current: track.clone(), // TODO: Avoid cloning track
-                position: i,
+                current_item: track.clone(), // TODO: Avoid cloning track
+                current_index: i,
                 total: tracks.len(),
                 track_progress_rx,
             })
@@ -384,6 +416,11 @@ mod tests {
         fut.await.unwrap();
         let final_progress = progress_rx.await.unwrap().borrow().clone();
         assert!(final_progress.downloaded == final_progress.total);
+
+        let new_download_config = download_config.rebuild().overwrite(false).build().unwrap();
+        let (fut, progress_rx) = track.download(&new_download_config, &client);
+        fut.await.unwrap();
+        assert!(progress_rx.await.is_err());
     }
 
     #[test]
@@ -402,7 +439,7 @@ mod tests {
         let rx = progress_rx.await.unwrap();
         let (final_position, total) = {
             let final_progress = rx.borrow();
-            (final_progress.position, final_progress.total)
+            (final_progress.current_index, final_progress.total)
         };
         assert!(final_position == total - 1);
     }

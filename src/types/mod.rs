@@ -235,11 +235,15 @@ impl Display for Performer {
     }
 }
 
-pub trait QobuzType: extra::ExtraExtract {
+pub trait QobuzType: std::fmt::Debug {
     #[must_use]
-    fn name_singular<'b>() -> &'b str;
+    fn name_singular<'b>() -> &'b str
+    where
+        Self: Sized;
     #[must_use]
-    fn name_plural<'b>() -> &'b str;
+    fn name_plural<'b>() -> &'b str
+    where
+        Self: Sized;
 }
 
 macro_rules! impl_qobuz_type {
@@ -251,6 +255,7 @@ macro_rules! impl_qobuz_type {
             impl<EF> QobuzType for $t<EF>
             where
                 $( EF: ExtraFlag<$extra_type>, )+
+                Self: std::fmt::Debug,
             {
                 fn name_singular<'b>() -> &'b str {
                     stringify!{[<$t:lower>]}

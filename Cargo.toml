@@ -5,7 +5,22 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = ["cli"]
+
+[workspace.dependencies]
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["full"] }
+tokio-test = "0.4.4"
+url = { version = "2.5.4", features = ["serde"] }
+
 [dependencies]
+
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-test = { workspace = true }
+url = { workspace = true }
+
 audiotags = { version = "0.5.0", git = "https://github.com/tarneaux/audiotags" }
 bytes = "1.10.0"
 chrono = { version = "0.4.39", features = ["serde"] }
@@ -16,7 +31,3 @@ paste = "1.0.15"
 reqwest = { version = "0.12.12", features = ["json", "stream"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
-thiserror = "2.0.11"
-tokio = { version = "1.43.0", features = ["full"] }
-tokio-test = "0.4.4"
-url = { version = "2.5.4", features = ["serde"] }
