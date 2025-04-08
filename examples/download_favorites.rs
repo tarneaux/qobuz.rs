@@ -41,7 +41,7 @@ async fn main() {
             let downloader = downloader.clone();
             async move {
                 let t = client.get_track(t.id.to_string().as_str()).await.unwrap();
-                println!("{}/{}: {}", i + 1, n, t.title);
+                println!("{}/{}: {}", i + 1, n, t);
                 let (fut, progress_rx) = t.download(&downloader, &client);
                 tokio::spawn(async move {
                     let rx = progress_rx.await;
