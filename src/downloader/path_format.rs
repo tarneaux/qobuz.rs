@@ -37,6 +37,7 @@ impl PathFormat {
         self.track_format.format(&TrackInfo {
             track_number: track.track_number,
             title: &track.title,
+            media_number: track.media_number,
         })
     }
 }
@@ -47,7 +48,7 @@ impl Default for PathFormat {
             album_format: "{artist} - {title} ({year}) [{quality}]"
                 .parse()
                 .expect("Format is correct"),
-            track_format: "{track_number}. {title}"
+            track_format: "{media_number}-{track_number}. {title}"
                 .parse()
                 .expect("Format is correct"),
         }
@@ -194,6 +195,7 @@ macro_rules! impl_placeholder_and_info {
 impl_placeholder_and_info!(Track, {
     track_number: u64,
     title: &'a str,
+    media_number: u64,
 });
 
 impl_placeholder_and_info!(Album, {

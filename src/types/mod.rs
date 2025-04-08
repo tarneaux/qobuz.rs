@@ -64,7 +64,7 @@ where
     pub hires_streamable: bool,
     pub id: u64,
     pub isrc: String,
-    pub media_number: i64,
+    pub media_number: u64,
     pub parental_warning: bool,
     pub performer: Option<Performer>,
     pub performers: Option<String>,
