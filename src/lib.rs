@@ -101,11 +101,16 @@ impl Client {
         if res.get("sample") == Some(&Value::Bool(true)) {
             return Err(ApiError::IsSample);
         }
-        let url: serde_json::Value = res
-            .get("url")
-            .ok_or(ApiError::MissingKey("url".to_string()))?
-            .clone();
-        Ok(serde_json::from_value(url)?)
+        match res.get("url") {
+            None => {
+                println!(
+                    "WARNING: couldn't get key url but key sample is {:?} while it should be true",
+                    res.get("sample")
+                );
+                Err(ApiError::IsSample)
+            }
+            Some(url) => Ok(serde_json::from_value(url.clone())?),
+        }
     }
 
     /// Get the user's favorites of type `T`.
