@@ -255,9 +255,17 @@ async fn download_tracks(
             .await
             .expect("The mpsc will never be closed on the receiving side");
 
-        let path = fut.await?;
+        println!("{track}");
 
-        paths.push(path);
+        match fut.await {
+            Err(DownloadError::ApiError(ApiError::IsSample)) => {
+                continue;
+            }
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(path) => paths.push(path),
+        };
     }
     Ok(paths)
 }
