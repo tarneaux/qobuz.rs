@@ -1,14 +1,10 @@
 #![allow(clippy::unwrap_used)]
 
 use qobuz::auth::Credentials;
-use qobuz::downloader::Download;
-use qobuz::downloader::DownloadConfig;
+use qobuz::downloader::{AutoRootDir, Download, DownloadConfig};
 use qobuz::types::extra::WithoutExtra;
 use qobuz::types::Album;
 use qobuz::Client;
-use std::path::Path;
-
-const PATH: &str = "music";
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +18,7 @@ async fn main() {
         .collect();
     for album in albums {
         println!("Downloading {album}");
-        let downloader = DownloadConfig::builder(Path::new(PATH))
+        let downloader = DownloadConfig::builder(AutoRootDir)
             .overwrite(true)
             .build()
             .unwrap();

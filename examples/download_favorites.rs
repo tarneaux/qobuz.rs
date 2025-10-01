@@ -1,17 +1,15 @@
 #![allow(clippy::unwrap_used)]
 
-const DIR: &str = "music";
-
 use futures::{stream, StreamExt};
 use qobuz::{
     auth::Credentials,
-    downloader::{Download, DownloadConfig},
+    downloader::{AutoRootDir, Download, DownloadConfig},
     types::{extra::WithExtra, Track},
     Client,
 };
 use std::{
     io::{self, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::sync::RwLock;
@@ -27,7 +25,11 @@ async fn main() {
         .filter(|t| t.streamable)
         .collect();
 
-    let downloader = DownloadConfig::builder(Path::new(DIR)).build().unwrap();
+    let root_dir: PathBuf = AutoRootDir.into();
+
+    let downloader = DownloadConfig::builder(Path::new(&root_dir))
+        .build()
+        .unwrap();
 
     let n = tracks.len();
     let v = vec![None; n];
@@ -35,7 +37,7 @@ async fn main() {
 
     stream::iter(tracks)
         .enumerate()
-        .for_each_concurrent(1, |(i, t)| {
+        .for_each_concurrent(5, |(i, t)| {
             let playlist = playlist.clone();
             let client = client.clone();
             let downloader = downloader.clone();
@@ -69,6 +71,6 @@ async fn main() {
         .iter()
         .map(|v| v.clone().unwrap())
         .collect();
-    let mut f = std::fs::File::create(format!("{DIR}/playlists/favorites.m3u")).unwrap();
+    let mut f = std::fs::File::create(root_dir.join("playlists").join("favorites.m3u")).unwrap();
     write!(f, "{}", playlist.join("\n")).unwrap();
 }

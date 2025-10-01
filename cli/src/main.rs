@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
 use qobuz::{
     auth::Credentials,
-    downloader::{Download, DownloadConfig, DownloadError},
+    downloader::{AutoRootDir, Download, DownloadConfig, DownloadError},
     types::{extra::WithExtra, Album, Playlist, Track},
     ApiError,
 };
+use std::fmt::Debug;
 use std::io::{self, Write};
-use std::{fmt::Debug, path::Path};
 use url::Url;
 
 const QOBUZ_HOSTS: [&str; 2] = ["play.qobuz.com", "open.qobuz.com"];
@@ -111,7 +111,7 @@ async fn make_client() -> qobuz::Client {
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let download_config = DownloadConfig::builder(Path::new("music"))
+    let download_config = DownloadConfig::builder(AutoRootDir)
         .overwrite(true)
         .build()
         .unwrap();

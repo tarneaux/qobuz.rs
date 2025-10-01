@@ -435,6 +435,33 @@ pub fn sanitize_filename(filename: &str) -> String {
     filename.trim_start_matches('.').to_string()
 }
 
+/// Automatically get the root dir from environment or a default value.
+///
+/// If used multiple times, should probably be converted to a PathBuf ahead of time for optimal
+/// performance, but the behavior won't change
+pub struct AutoRootDir;
+
+impl From<AutoRootDir> for PathBuf {
+    fn from(_: AutoRootDir) -> Self {
+        match std::env::var("QOBUZ_DL_ROOT") {
+            Ok(v) => v.into(),
+            Err(e) => {
+                match e {
+                    std::env::VarError::NotPresent => {}
+                    std::env::VarError::NotUnicode(_) => {
+                        println!(
+                            "WARNING: Your QOBUZ_DL_ROOT variable couldn't be decoded as unicode."
+                        );
+                    }
+                }
+                std::env::home_dir()
+                    .expect("Couldn't get home dir")
+                    .join("Music")
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
