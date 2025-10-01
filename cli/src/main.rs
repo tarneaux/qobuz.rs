@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use qobuz::{
     auth::Credentials,
-    downloader::{Download, DownloadConfig, DownloadError, Progress},
+    downloader::{Download, DownloadConfig, DownloadError},
     types::{extra::WithExtra, Album, Playlist, Track},
     ApiError,
 };
@@ -39,7 +39,7 @@ async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, ApiError> {
 
     macro_rules! get {
         ($t:ident) => {
-            Type::$t(client.get_item::<$t<WithExtra>>(id).await?)
+            Type::$t(Box::new(client.get_item::<$t<WithExtra>>(id).await?))
         };
     }
 
@@ -53,9 +53,9 @@ async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, ApiError> {
 
 #[derive(Debug, Clone)]
 enum Type {
-    Track(Track<WithExtra>),
-    Album(Album<WithExtra>),
-    Playlist(Playlist<WithExtra>),
+    Track(Box<Track<WithExtra>>),
+    Album(Box<Album<WithExtra>>),
+    Playlist(Box<Playlist<WithExtra>>),
 }
 
 macro_rules! impl_all_variants {
@@ -68,6 +68,12 @@ macro_rules! impl_all_variants {
     };
 }
 
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        impl_all_variants!(self, item, { std::fmt::Debug::fmt(&item, f) })
+    }
+}
+
 impl Type {
     async fn download(
         &self,
@@ -75,12 +81,12 @@ impl Type {
         client: &qobuz::Client,
     ) -> Result<(), DownloadError> {
         impl_all_variants!(self, item, {
-            download_item(item, download_config, client).await
+            download_item(item.as_ref(), download_config, client).await
         })
     }
 }
 
-async fn download_item<T: Download>(
+async fn download_item<T: Download + Sync>(
     item: &T,
     download_config: &DownloadConfig,
     client: &qobuz::Client,
@@ -89,8 +95,7 @@ async fn download_item<T: Download>(
     tokio::spawn(async move {
         let mut rx = progress_rx.await.expect("No status returned");
         while rx.changed().await.is_ok() {
-            let progress = rx.borrow();
-            println!("{}%", progress.progress_percentage());
+            println!("{}%", *rx.borrow());
             io::stdout().flush().unwrap();
         }
     });
@@ -119,7 +124,7 @@ async fn main() {
                 let client = make_client().await;
                 let url = v.parse().unwrap();
                 let item = get_item(&client, url).await.unwrap();
-                println!("{:?}", item);
+                println!("{item}");
                 item.download(&download_config, &client).await.unwrap();
             }
         },
