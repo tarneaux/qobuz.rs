@@ -310,7 +310,8 @@ impl Download for Playlist<WithExtra> {
             download_tracks(tracks, download_config, client, progress_tx)
                 .await
                 .and_then(|track_paths| {
-                    let m3u_path = write_m3u(self, download_config)?;
+                    let m3u_path =
+                        write_m3u(self, download_config).map_err(DownloadError::M3uWritingError)?;
                     Ok(PlaylistPathInfo {
                         track_paths,
                         m3u_path,
@@ -405,6 +406,8 @@ pub enum DownloadError {
     ReqwestError(#[from] reqwest::Error),
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
+    #[error("IO error while writing M3u file `{0}`")]
+    M3uWritingError(std::io::Error),
 }
 
 #[derive(Debug, Error)]
