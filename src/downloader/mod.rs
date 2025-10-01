@@ -420,7 +420,10 @@ pub enum NonExistentDirectoryError {
 
 #[must_use]
 pub fn sanitize_filename(filename: &str) -> String {
-    let filename = filename.trim().replace('/', "-");
+    let filename = filename
+        .trim()
+        .replace('/', "-")
+        .replace(|c: char| !c.is_alphanumeric(), "_");
     filename.trim_start_matches('.').to_string()
 }
 
