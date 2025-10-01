@@ -31,7 +31,7 @@ async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, ApiError> {
         todo!();
     };
     if !QOBUZ_HOSTS.contains(&domain) {
-        return todo!();
+        todo!();
     }
     let mut path = url.path_segments().unwrap();
     let kind = path.next().unwrap();
