@@ -8,6 +8,7 @@ use crate::{
     ApiError,
 };
 use futures::{Future, StreamExt};
+use std::fmt::Display;
 use std::{
     ffi::{OsStr, OsString},
     fmt::Debug,
@@ -97,7 +98,7 @@ pub trait Download: RootEntity {
     );
 }
 
-pub trait Progress: Debug {
+pub trait Progress: Debug + Display {
     fn progress_numerator(&self) -> u64;
     fn progress_denominator(&self) -> u64;
     fn progress_percentage(&self) -> u64 {
@@ -117,6 +118,16 @@ impl Progress for TrackDownloadProgress {
     }
     fn progress_denominator(&self) -> u64 {
         self.total
+    }
+}
+
+impl std::fmt::Display for TrackDownloadProgress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Track download progress: {}%",
+            self.progress_percentage()
+        )
     }
 }
 
@@ -140,6 +151,16 @@ impl Progress for ArrayDownloadProgress {
     }
     fn progress_denominator(&self) -> u64 {
         self.total as u64
+    }
+}
+
+impl std::fmt::Display for ArrayDownloadProgress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Array download progress: {}%",
+            self.progress_percentage()
+        )
     }
 }
 
