@@ -1,5 +1,6 @@
 use core::fmt::{self, Display, Formatter};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -37,14 +38,27 @@ impl TryFrom<u8> for Quality {
             6 => Ok(Self::Cd),
             7 => Ok(Self::HiRes96),
             27 => Ok(Self::HiRes192),
-            v => Err(InvalidQualityError(v)),
+            _ => Err(InvalidQualityError),
+        }
+    }
+}
+
+impl FromStr for Quality {
+    type Err = InvalidQualityError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_lowercase().as_str() {
+            "mp3" => Ok(Self::Mp3),
+            "cd" => Ok(Self::Cd),
+            "hires96" => Ok(Self::HiRes96),
+            "hires192" => Ok(Self::HiRes192),
+            v => Quality::try_from(v.parse::<u8>().map_err(|_| InvalidQualityError)?),
         }
     }
 }
 
 #[derive(Debug, Error)]
-#[error("Invalid quality int `{0}`")]
-pub struct InvalidQualityError(u8);
+#[error("Invalid quality")]
+pub struct InvalidQualityError;
 
 impl From<Quality> for u8 {
     fn from(val: Quality) -> Self {
