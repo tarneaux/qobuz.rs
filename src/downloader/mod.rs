@@ -69,6 +69,7 @@ builder! {
             m3u_dir: PathBuf = root_dir.join("playlists"),
             quality: Quality = Quality::default(),
             overwrite: bool = false,
+            overwrite_playlists: bool = true,
             path_format: PathFormat = PathFormat::default(),
         }
     },
@@ -370,7 +371,7 @@ pub fn write_m3u(
         .write(true)
         .create(true)
         .truncate(true)
-        .create_new(!download_config.overwrite) // (Shadows create and truncate)
+        .create_new(!download_config.overwrite_playlists) // (Shadows create and truncate)
         .open(&m3u_path)?;
     let track_paths = playlist
         .tracks
