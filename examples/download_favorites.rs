@@ -45,9 +45,8 @@ async fn main() {
                 let (fut, progress_rx) = t.download(&downloader, &client);
                 tokio::spawn(async move {
                     let rx = progress_rx.await;
-                    let mut rx = match rx {
-                        Ok(v) => v,
-                        Err(_) => return,
+                    let Ok(mut rx) = rx else {
+                        return;
                     };
                     while rx.changed().await.is_ok() {
                         let percent = {
