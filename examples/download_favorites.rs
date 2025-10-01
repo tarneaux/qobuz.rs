@@ -69,6 +69,6 @@ async fn main() {
         .iter()
         .map(|v| v.clone().unwrap())
         .collect();
-    let mut f = std::fs::File::create(format!("{DIR}/favorites.m3u")).unwrap();
+    let mut f = std::fs::File::create(format!("{DIR}/playlists/favorites.m3u")).unwrap();
     write!(f, "{}", playlist.join("\n")).unwrap();
 }
