@@ -337,6 +337,8 @@ impl Client {
     }
 }
 
+// Make a request to the API and return the resulting JSON.
+// In the test cfg, this also prints some debugging information when it fails.
 async fn do_request<T: DeserializeOwned + Send>(
     client: &reqwest::Client,
     path: &str,
@@ -387,16 +389,26 @@ async fn do_request<T: DeserializeOwned + Send>(
     json
 }
 
+/// Errors that may arise when using the API.
 #[derive(Debug, Error)]
 pub enum ApiError {
+    /// Raised when getting the download URL of a track that is a sample.
     #[error("downloadable file is a sample")]
     IsSample,
+
+    /// Network issue that can arise when streaming a track.
     #[error("No content length returned for track stream")]
     NoContentLength,
+
+    /// Generic JSON key indexing error
     #[error("couldn't get key `{0}`")]
     MissingKey(String),
+
+    /// Generic Serde error, may happen on any request
     #[error("serde_json error `{0}`")]
     SerdeJsonError(#[from] serde_json::Error),
+
+    /// Generic Reqwest error, may happen on any request
     #[error("reqwest error `{0}`")]
     ReqwestError(#[from] reqwest::Error),
 }
