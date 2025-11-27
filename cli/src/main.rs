@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use qobuz::{
-    auth::Credentials,
+    auth::{Credentials, LoginError},
     downloader::{AutoRootDir, Download, DownloadConfig, DownloadError},
     types::{extra::WithExtra, Album, Playlist, Track},
     ApiError,
@@ -26,16 +26,16 @@ enum Command {
     },
 }
 
-async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, ApiError> {
+async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, GetItemError> {
     let Some(url::Host::Domain(domain)) = url.host() else {
-        todo!();
+        return Err(GetItemError::NoDomain);
     };
     if !QOBUZ_HOSTS.contains(&domain) {
-        todo!();
+        return Err(GetItemError::NotAQobuzUrl);
     }
-    let mut path = url.path_segments().unwrap();
-    let kind = path.next().unwrap();
-    let id = path.next().unwrap();
+    let mut path = url.path_segments().ok_or(GetItemError::PathErr)?;
+    let kind = path.next().ok_or(GetItemError::PathErr)?;
+    let id = path.next().ok_or(GetItemError::PathErr)?;
 
     macro_rules! get {
         ($t:ident) => {
@@ -43,13 +43,42 @@ async fn get_item(client: &qobuz::Client, url: Url) -> Result<Type, ApiError> {
         };
     }
 
-    Ok(match kind {
-        "track" => get!(Track),
-        "album" => get!(Album),
-        "playlist" => get!(Playlist),
-        _ => todo!(),
-    })
+    match kind {
+        "track" => Ok(get!(Track)),
+        "album" => Ok(get!(Album)),
+        "playlist" => Ok(get!(Playlist)),
+        e => Err(GetItemError::UnrecognizedKind(e.to_string())),
+    }
 }
+
+#[derive(Debug)]
+enum GetItemError {
+    ApiError(ApiError),
+    UnrecognizedKind(String),
+    NotAQobuzUrl,
+    NoDomain,
+    PathErr,
+}
+
+impl From<ApiError> for GetItemError {
+    fn from(v: ApiError) -> Self {
+        Self::ApiError(v)
+    }
+}
+
+impl std::fmt::Display for GetItemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::ApiError(e) => write!(f, "API error: {e}"),
+            Self::UnrecognizedKind(kind) => write!(f, "Unrecognized kind of data: {kind}"),
+            Self::NotAQobuzUrl => write!(f, "Supplied URL is not a Qobuz URL"),
+            Self::NoDomain => write!(f, "Couldn't get URL host domain"),
+            Self::PathErr => write!(f, "Error while getting URL path parts"),
+        }
+    }
+}
+
+impl std::error::Error for GetItemError {}
 
 #[derive(Debug, Clone)]
 enum Type {
@@ -95,17 +124,23 @@ async fn download_item<T: Download + Sync>(
     tokio::spawn(async move {
         let mut rx = progress_rx.await.expect("No status returned");
         while rx.changed().await.is_ok() {
-            println!("{}%", *rx.borrow());
-            io::stdout().flush().unwrap();
+            println!("{}", *rx.borrow());
+            let _ = io::stdout().flush();
         }
     });
     fut.await.map(|_| ())
 }
 
-async fn make_client() -> qobuz::Client {
-    qobuz::Client::new(Credentials::from_env().unwrap())
+async fn make_client() -> Result<qobuz::Client, LoginError> {
+    qobuz::Client::new(Credentials::from_env().expect("Couldn't get credentials from environment"))
         .await
-        .unwrap()
+}
+
+macro_rules! fatal {
+    ($ec:literal, $t:literal) => {{
+        println!($t);
+        std::process::exit($ec);
+    }};
 }
 
 #[tokio::main]
@@ -114,18 +149,25 @@ async fn main() {
     let download_config = DownloadConfig::builder(AutoRootDir)
         .overwrite(true)
         .build()
-        .unwrap();
+        .unwrap_or_else(|e| fatal!(2, "Error while building downloader: {e}"));
     match args.command {
         Command::Dl { url } => match url.as_str() {
             "tracks" | "track" => todo!(),
             "albums" | "album" => todo!(),
             "playlists" | "playlist" => todo!(),
             v => {
-                let client = make_client().await;
-                let url = v.parse().unwrap();
-                let item = get_item(&client, url).await.unwrap();
-                println!("{item}");
-                item.download(&download_config, &client).await.unwrap();
+                let client = make_client()
+                    .await
+                    .unwrap_or_else(|e| fatal!(1, "Couldn't login to Qobuz: {e}"));
+                let url: Url = v
+                    .parse()
+                    .unwrap_or_else(|e| fatal!(2, "Couldn't parse URL {v}: {e}"));
+                let item = get_item(&client, url.clone())
+                    .await
+                    .unwrap_or_else(|e| fatal!(1, "Error while getting item {url}: {e}"));
+                item.download(&download_config, &client)
+                    .await
+                    .unwrap_or_else(|e| fatal!(1, "Couldn't download item {url}: {e}"));
             }
         },
     }
