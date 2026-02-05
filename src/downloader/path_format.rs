@@ -11,8 +11,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct PathFormat {
-    album_format: Format<AlbumPlaceholder>,
-    track_format: Format<TrackPlaceholder>,
+    pub album_format: Format<AlbumPlaceholder>,
+    pub track_format: Format<TrackPlaceholder>,
 }
 
 impl PathFormat {
@@ -42,13 +42,19 @@ impl PathFormat {
     }
 }
 
+/// Default album path format used in PathFormat's Default implementation.
+pub const DEFAULT_ALBUM_PATH_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
+
+/// Default track path format used in PathFormat's Default implementation.
+pub const DEFAULT_TRACK_PATH_FORMAT: &str = "{media_number}-{track_number}. {title}";
+
 impl Default for PathFormat {
     fn default() -> Self {
         Self {
-            album_format: "{artist} - {title} ({year}) [{quality}]"
+            album_format: DEFAULT_ALBUM_PATH_FORMAT
                 .parse()
                 .expect("Format is correct"),
-            track_format: "{media_number}-{track_number}. {title}"
+            track_format: DEFAULT_TRACK_PATH_FORMAT
                 .parse()
                 .expect("Format is correct"),
         }
