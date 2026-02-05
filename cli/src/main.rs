@@ -1,12 +1,19 @@
 use clap::{Parser, Subcommand};
 use qobuz::{
     auth::{Credentials, LoginError},
-    downloader::{AutoRootDir, Download, DownloadConfig, DownloadError},
+    downloader::{
+        path_format::{PathFormat, DEFAULT_ALBUM_PATH_FORMAT, DEFAULT_TRACK_PATH_FORMAT},
+        AutoRootDir, Download, DownloadConfig, DownloadError,
+    },
+    quality::Quality,
     types::{extra::WithExtra, Album, Playlist, Track},
     ApiError,
 };
-use std::fmt::Debug;
-use std::io::{self, Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+    path::PathBuf,
+};
 use url::Url;
 
 const QOBUZ_HOSTS: [&str; 2] = ["play.qobuz.com", "open.qobuz.com"];
@@ -15,6 +22,35 @@ const QOBUZ_HOSTS: [&str; 2] = ["play.qobuz.com", "open.qobuz.com"];
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Root directory for downloads.
+    /// Overrides QOBUZ_DL_ROOT.
+    #[clap(long, short)]
+    root_dir: Option<PathBuf>,
+
+    /// Directory for m3u playlist files [default: {root_dir}/playlists]
+    #[clap(long)]
+    m3u_dir: Option<PathBuf>,
+
+    /// The download quality
+    #[clap(long, short, default_value = "cd")]
+    quality: Quality,
+
+    /// Overwrite items that already exist (excludes playlists)
+    #[clap(long, short)]
+    overwrite: bool,
+
+    /// Don't overwrite playlist files that already exist
+    #[clap(long, short = 'O')]
+    no_overwrite_playlists: bool,
+
+    /// Path format for albums
+    #[clap(short, long, default_value = DEFAULT_ALBUM_PATH_FORMAT)]
+    album_path_format: String,
+
+    /// Path format for tracks
+    #[clap(short, long, default_value = DEFAULT_TRACK_PATH_FORMAT)]
+    track_path_format: String,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -146,8 +182,23 @@ macro_rules! fatal {
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let download_config = DownloadConfig::builder(AutoRootDir)
-        .overwrite(true)
+    let root_dir = args.root_dir.unwrap_or_else(|| AutoRootDir.into());
+    let m3u_dir = args.m3u_dir.unwrap_or_else(|| root_dir.join("playlists"));
+    let download_config = DownloadConfig::builder(root_dir)
+        .m3u_dir(m3u_dir)
+        .quality(args.quality)
+        .overwrite(args.overwrite)
+        .overwrite_playlists(!args.no_overwrite_playlists)
+        .path_format(PathFormat {
+            album_format: args
+                .album_path_format
+                .parse()
+                .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
+            track_format: args
+                .track_path_format
+                .parse()
+                .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
+        })
         .build()
         .unwrap_or_else(|e| fatal!(2, "Error while building downloader: {e}"));
     match args.command {

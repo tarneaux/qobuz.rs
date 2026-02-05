@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default, clap::ValueEnum)]
 #[serde(try_from = "u8")]
 #[serde(into = "u8")]
 pub enum Quality {
     Mp3,
+    #[default]
     Cd,
     HiRes96,
     HiRes192,
@@ -21,12 +22,6 @@ impl Display for Quality {
             Self::HiRes96 => write!(f, "HiRes96"),
             Self::HiRes192 => write!(f, "HiRes192"),
         }
-    }
-}
-
-impl Default for Quality {
-    fn default() -> Self {
-        Self::Cd
     }
 }
 
@@ -46,7 +41,7 @@ impl TryFrom<u8> for Quality {
 impl FromStr for Quality {
     type Err = InvalidQualityError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.to_lowercase().as_str() {
+        match value.to_lowercase().replace('-', "").as_str() {
             "mp3" => Ok(Self::Mp3),
             "cd" => Ok(Self::Cd),
             "hires96" => Ok(Self::HiRes96),
