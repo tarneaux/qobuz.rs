@@ -100,10 +100,15 @@ pub trait Download: RootEntity {
 }
 
 pub trait Progress: Debug + Display {
+    /// The numerator of the progress.
     fn progress_numerator(&self) -> u64;
+    /// The denominator of the progress.
     fn progress_denominator(&self) -> u64;
-    fn progress_percentage(&self) -> u64 {
-        self.progress_numerator() * 100 / self.progress_denominator()
+    /// The progress as an integer percentage.
+    fn progress_percentage(&self) -> u8 {
+        (self.progress_numerator() * 100 / self.progress_denominator())
+            .try_into()
+            .expect("Percentage should fit in u8")
     }
 }
 
@@ -132,11 +137,16 @@ impl std::fmt::Display for TrackDownloadProgress {
     }
 }
 
+/// The progress of an array download.
 #[derive(Debug)]
 pub struct ArrayDownloadProgress {
+    /// The item that will be downloaded now.
     pub current_item: Track<WithExtra>,
+    /// The index of the item that will be downloaded now (`current_index` < `total`).
     pub current_index: usize,
+    /// The total count of items in the download array.
     pub total: usize,
+    /// The progress receiver of the item that is being downloaded.
     pub track_progress_rx: oneshot::Receiver<watch::Receiver<TrackDownloadProgress>>,
 }
 
@@ -450,7 +460,7 @@ impl From<AutoRootDir> for PathBuf {
                     std::env::VarError::NotPresent => {}
                     std::env::VarError::NotUnicode(_) => {
                         println!(
-                            "WARNING: Your QOBUZ_DL_ROOT variable couldn't be decoded as unicode."
+                            "WARNING: Your QOBUZ_DL_ROOT variable couldn't be decoded as unicode. Using default."
                         );
                     }
                 }
