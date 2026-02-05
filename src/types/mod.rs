@@ -180,7 +180,6 @@ where
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Genre {
-    pub color: String,
     pub id: u64,
     pub name: String,
     // pub path: Vec<i64>,
@@ -221,7 +220,6 @@ pub enum PlaylistGenre {
     String(String),
     Object {
         id: u32,
-        color: String,
         name: String,
         path: Vec<u32>,
         slug: String,
