@@ -1,46 +1,10 @@
 use crate::{
-    types::{
-        extra::{ExtraFlag, WithoutExtra},
-        Album, Array, Track,
-    },
+    types::{Album, AlbumExtra, Track, TrackExtra},
     Quality,
 };
 use chrono::Datelike;
 use std::str::FromStr;
 use thiserror::Error;
-
-#[derive(Debug, Clone)]
-pub struct PathFormat {
-    pub album_format: Format<AlbumPlaceholder>,
-    pub track_format: Format<TrackPlaceholder>,
-}
-
-impl PathFormat {
-    /// Formats an album directory path
-    pub(super) fn get_album_dir<EF>(&self, album: &Album<EF>, quality: &Quality) -> String
-    where
-        EF: ExtraFlag<Array<Track<WithoutExtra>>>,
-    {
-        self.album_format.format(&AlbumInfo {
-            artist: &album.artist.name,
-            title: &album.title,
-            year: album.release_date_original.year(),
-            quality: quality.to_string().as_str(),
-        })
-    }
-
-    /// Formats a track filename.
-    pub(super) fn get_track_file_basename<EF>(&self, track: &Track<EF>) -> String
-    where
-        EF: ExtraFlag<Album<WithoutExtra>>,
-    {
-        self.track_format.format(&TrackInfo {
-            track_number: track.track_number,
-            title: &track.title,
-            media_number: track.media_number,
-        })
-    }
-}
 
 /// Default album path format used in PathFormat's Default implementation.
 pub const DEFAULT_ALBUM_PATH_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
@@ -48,23 +12,31 @@ pub const DEFAULT_ALBUM_PATH_FORMAT: &str = "{artist} - {title} ({year}) [{quali
 /// Default track path format used in PathFormat's Default implementation.
 pub const DEFAULT_TRACK_PATH_FORMAT: &str = "{media_number}-{track_number}. {title}";
 
-impl Default for PathFormat {
-    fn default() -> Self {
-        Self {
-            album_format: DEFAULT_ALBUM_PATH_FORMAT
-                .parse()
-                .expect("Format is correct"),
-            track_format: DEFAULT_TRACK_PATH_FORMAT
-                .parse()
-                .expect("Format is correct"),
-        }
-    }
-}
-
 /// Format struct for holding parsed format segments.
 #[derive(Debug, Clone)]
 pub struct Format<P: Placeholder> {
     segments: Vec<FormatSegment<P>>,
+}
+
+impl Format<AlbumPlaceholder> {
+    pub fn format<EF: AlbumExtra>(&self, v: &Album<EF>, quality: &Quality) -> String {
+        self.format_sub(&AlbumInfo {
+            artist: &v.artist.name,
+            title: &v.title,
+            year: v.release_date_original.year(),
+            quality: quality.to_string().as_str(),
+        })
+    }
+}
+
+impl Format<TrackPlaceholder> {
+    pub fn format<EF: TrackExtra>(&self, v: &Track<EF>) -> String {
+        self.format_sub(&TrackInfo {
+            track_number: v.track_number,
+            title: &v.title,
+            media_number: v.media_number,
+        })
+    }
 }
 
 impl<P: Placeholder> std::fmt::Display for Format<P> {
@@ -77,6 +49,22 @@ impl<P: Placeholder> std::fmt::Display for Format<P> {
                 .map(std::string::ToString::to_string)
                 .collect::<String>()
         )
+    }
+}
+
+impl Default for Format<TrackPlaceholder> {
+    fn default() -> Self {
+        DEFAULT_TRACK_PATH_FORMAT
+            .parse()
+            .expect("Predefined format is correct")
+    }
+}
+
+impl Default for Format<AlbumPlaceholder> {
+    fn default() -> Self {
+        DEFAULT_ALBUM_PATH_FORMAT
+            .parse()
+            .expect("Predefined format is correct")
     }
 }
 
@@ -180,7 +168,7 @@ macro_rules! impl_placeholder_and_info {
 
             impl<'a> Format<[<$type Placeholder>]> {
                 #[must_use]
-                pub fn format(&self, data: &[<$type Info>]<'a>) -> String {
+                fn format_sub(&self, data: &[<$type Info>]<'a>) -> String {
                     self.segments.iter().map(|s| {
                         match s {
                             FormatSegment::Literal(s) => s.to_string(),

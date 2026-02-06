@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use qobuz::{
     auth::{Credentials, LoginError},
     downloader::{
-        path_format::{PathFormat, DEFAULT_ALBUM_PATH_FORMAT, DEFAULT_TRACK_PATH_FORMAT},
+        path_format::{DEFAULT_ALBUM_PATH_FORMAT, DEFAULT_TRACK_PATH_FORMAT},
         AutoRootDir, Download, DownloadConfig, DownloadError,
     },
     quality::Quality,
@@ -189,16 +189,16 @@ async fn main() {
         .quality(args.quality)
         .overwrite(args.overwrite)
         .overwrite_playlists(!args.no_overwrite_playlists)
-        .path_format(PathFormat {
-            album_format: args
-                .album_path_format
+        .album_path_format(
+            args.album_path_format
                 .parse()
                 .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
-            track_format: args
-                .track_path_format
+        )
+        .track_path_format(
+            args.track_path_format
                 .parse()
                 .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
-        })
+        )
         .build()
         .unwrap_or_else(|e| fatal!(2, "Error while building downloader: {e}"));
     match args.command {

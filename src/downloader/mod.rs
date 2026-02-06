@@ -1,9 +1,9 @@
 use crate::{
+    downloader::path_format::{AlbumPlaceholder, Format, TrackPlaceholder},
     quality::{FileExtension, Quality},
     types::{
-        extra::{ExtraFlag, WithExtra, WithoutExtra},
-        traits::RootEntity,
-        Album, Array, Playlist, QobuzType, Track,
+        extra::WithExtra, traits::RootEntity, Album, AlbumExtra, Playlist, PlaylistExtra,
+        QobuzType, Track,
     },
     ApiError,
 };
@@ -23,7 +23,6 @@ use tokio::{
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
 pub mod path_format;
-use path_format::PathFormat;
 
 mod delayed_watch;
 use delayed_watch::DelayedWatchReceiver;
@@ -70,7 +69,8 @@ builder! {
             quality: Quality = Quality::default(),
             overwrite: bool = false,
             overwrite_playlists: bool = true,
-            path_format: PathFormat = PathFormat::default(),
+            track_path_format: Format<TrackPlaceholder> = Format::default(),
+            album_path_format: Format<AlbumPlaceholder> = Format::default(),
         }
     },
     verify: Result<(), NonExistentDirectoryError> = {
@@ -349,7 +349,7 @@ impl GetPath for Track<WithExtra> {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         self.album.get_path(download_config).join(format!(
             "{}.{}",
-            sanitize_filename(&download_config.path_format.get_track_file_basename(self)),
+            sanitize_filename(&download_config.track_path_format.format(self)),
             FileExtension::from(&download_config.quality)
         ))
     }
@@ -357,21 +357,18 @@ impl GetPath for Track<WithExtra> {
 
 impl<EF> GetPath for Album<EF>
 where
-    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+    EF: AlbumExtra,
 {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         download_config.root_dir.join(sanitize_filename(
             &download_config
-                .path_format
-                .get_album_dir(self, &download_config.quality),
+                .album_path_format
+                .format(self, &download_config.quality),
         ))
     }
 }
 
-impl<EF> GetPath for Playlist<EF>
-where
-    EF: ExtraFlag<Array<Track<WithExtra>>>,
-{
+impl<EF: PlaylistExtra> GetPath for Playlist<EF> {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         download_config
             .m3u_dir

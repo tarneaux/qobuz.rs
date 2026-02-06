@@ -11,8 +11,10 @@ use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
 
+pub trait PlaylistExtra = ExtraFlag<Array<Track<WithExtra>>>;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Playlist<EF: ExtraFlag<Array<Track<WithExtra>>>> {
+pub struct Playlist<EF: PlaylistExtra> {
     pub name: String,
     pub slug: String,
     pub owner: Owner,
@@ -50,10 +52,12 @@ pub struct Array<T> {
     pub total: i64,
 }
 
+pub trait TrackExtra = ExtraFlag<Album<WithoutExtra>>;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Track<EF>
 where
-    EF: ExtraFlag<Album<WithoutExtra>>,
+    EF: TrackExtra,
 {
     pub copyright: Option<String>,
     pub displayable: bool,
@@ -102,10 +106,12 @@ where
     }
 }
 
+pub trait AlbumExtra = ExtraFlag<Array<Track<WithoutExtra>>>;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Album<EF>
 where
-    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
+    EF: AlbumExtra,
 {
     pub artist: Artist<WithoutExtra>,
     pub displayable: bool,

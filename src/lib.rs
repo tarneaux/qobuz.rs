@@ -1,4 +1,5 @@
 #![feature(type_changing_struct_update)]
+#![feature(trait_alias)]
 
 pub mod auth;
 pub mod downloader;
