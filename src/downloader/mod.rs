@@ -32,8 +32,8 @@ use delayed_watch::DelayedWatchReceiver;
 #[macro_use]
 mod builder;
 
-pub const DEFAULT_ALBUM_FILENAME_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
-pub const DEFAULT_TRACK_FILENAME_FORMAT: &str = "{media_number}-{track_number}. {title}";
+pub const DEFAULT_ALBUM_DIR_NAME_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
+pub const DEFAULT_TRACK_FILE_NAME_FORMAT: &str = "{media_number}-{track_number}. {title}";
 
 builder! {
     /// Options for downloads.
@@ -75,8 +75,8 @@ builder! {
             quality: Quality = Quality::default(),
             overwrite: bool = false,
             overwrite_playlists: bool = true,
-            track_path_format: Format<DownloadedItemPlaceholder<TrackPlaceholder>> = DEFAULT_TRACK_FILENAME_FORMAT.parse().expect("Default format is correct"),
-            album_path_format: Format<DownloadedItemPlaceholder<AlbumPlaceholder>> = DEFAULT_ALBUM_FILENAME_FORMAT.parse().expect("Default format is correct"),
+            track_file_name_format: Format<DownloadedItemPlaceholder<TrackPlaceholder>> = DEFAULT_TRACK_FILE_NAME_FORMAT.parse().expect("Default format is correct"),
+            album_dir_name_format: Format<DownloadedItemPlaceholder<AlbumPlaceholder>> = DEFAULT_ALBUM_DIR_NAME_FORMAT.parse().expect("Default format is correct"),
         }
     },
     verify: Result<(), NonExistentDirectoryError> = {

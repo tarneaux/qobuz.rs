@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use qobuz::{
     auth::{Credentials, LoginError},
     downloader::{
-        AutoRootDir, Download, DownloadConfig, DownloadError, DEFAULT_ALBUM_FILENAME_FORMAT,
-        DEFAULT_TRACK_FILENAME_FORMAT,
+        AutoRootDir, Download, DownloadConfig, DownloadError, DEFAULT_ALBUM_DIR_NAME_FORMAT,
+        DEFAULT_TRACK_FILE_NAME_FORMAT,
     },
     quality::Quality,
     types::{extra::WithExtra, Album, Playlist, Track},
@@ -45,12 +45,12 @@ struct Cli {
     no_overwrite_playlists: bool,
 
     /// Path format for albums
-    #[clap(short, long, default_value = DEFAULT_ALBUM_FILENAME_FORMAT)]
-    album_path_format: String,
+    #[clap(short, long, default_value = DEFAULT_ALBUM_DIR_NAME_FORMAT)]
+    album_dir_name_format: String,
 
     /// Path format for tracks
-    #[clap(short, long, default_value = DEFAULT_TRACK_FILENAME_FORMAT)]
-    track_path_format: String,
+    #[clap(short, long, default_value = DEFAULT_TRACK_FILE_NAME_FORMAT)]
+    track_file_name_format: String,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -189,13 +189,13 @@ async fn main() {
         .quality(args.quality)
         .overwrite(args.overwrite)
         .overwrite_playlists(!args.no_overwrite_playlists)
-        .album_path_format(
-            args.album_path_format
+        .album_dir_name_format(
+            args.album_dir_name_format
                 .parse()
                 .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
         )
-        .track_path_format(
-            args.track_path_format
+        .track_file_name_format(
+            args.track_file_name_format
                 .parse()
                 .unwrap_or_else(|e| fatal!(2, "Provided album path format is incorrect: {e}")),
         )
