@@ -29,8 +29,27 @@ const API_URL: &str = "https://www.qobuz.com/api.json/0.2/";
 const API_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/83.0";
 
+/// The Qobuz API Client.
+///
+/// # Example
+///
+///
+/// ```
+/// # use tokio_test;
+/// # tokio_test::block_on(async {
+/// use qobuz::{auth::Credentials, Client};
+/// let credentials = Credentials::from_env().unwrap();
+/// let client = Client::new(credentials).await.unwrap();
+/// let track = client
+///     .get_track("129342731")
+///     .await
+///     .unwrap();
+/// assert_eq!(track.title, "Let It Be");
+/// # })
+/// ```
 #[derive(Debug, Clone)]
 pub struct Client {
+    /// Inner reqwest client for lower-level requests.
     pub reqwest_client: reqwest::Client,
     secret: String,
 }

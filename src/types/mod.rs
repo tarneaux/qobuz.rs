@@ -1,5 +1,48 @@
-// Erroneous warning that is shown when using the same trait twice with different arguments
-#![allow(clippy::trait_duplication_in_bounds)]
+//! Types returned by the Qobuz API.
+//!
+//! # Extra Flags
+//!
+//! The core Qobuz types have parts which may or may not be returned by the API depending on
+//! whether or not the type is the root of the response or a child. For example, when querying a
+//! track, the album it is from will also be returned, but this album's tracks will *not* be
+//! returned.
+//!
+//! To prevent duplication of these types (one top-level and one lower-level version), they have
+//! been implemented with a generic, named `EF` ("Extra Flag"). It can have one of two values :
+//! [`WithExtra`] and [`WithoutExtra`]. WithExtra makes for a top-level struct containing it's
+//! children's information (e.g an [`Album<WithExtra>`] will contain the album's tracks).
+//!
+//! For example, a function that needs a playlist with its tracks could look like this :
+//!
+//! ```
+//! use qobuz::types::{Playlist, PlaylistExtra, Array, Track, extra::WithExtra};
+//! fn get_playlist_tracks<'a>(playlist: &'a Playlist<WithExtra>) -> &Array<Track<WithExtra>> {
+//!     &playlist.tracks
+//! }
+//! ```
+//!
+//! [`WithExtra`] and [`WithoutExtra`] are two empty structs implementing the [`ExtraFlag`] trait.
+//! This trait takes a generic that corresponds to the optional field's type. To avoid extensive
+//! type constraints when using these types, trait aliases have been created for each type of the
+//! API that has an extra flag (namely [`Album`], [`Playlist`], [`Track`] and [`Artist`]). These
+//! aliases are respectively called [`AlbumExtra`], [`PlaylistExtra`], [`TrackExtra`] and
+//! [`ArtistExtra`].
+//!
+//! For example, a function with an [`Playlist`] argument that doesn't need to access the
+//! playlist's tracks (and should therefore accept both [`Playlist<WithExtra>`] and
+//! [`Playlist<WithoutExtra>`] arguments) can be written as follows :
+//!
+//! ```
+//! use qobuz::types::{Playlist, PlaylistExtra};
+//!
+//! fn get_playlist_name<'a, EF: PlaylistExtra>(playlist: &'a Playlist<EF>) -> &'a str {
+//!     &playlist.name
+//! }
+//! ```
+//!
+//! For convenience, [`Album`], [`Playlist`], [`Track`] and [`Artist`] have `without_extra` and
+//! `with_extra` methods which allow converting between the [`WithExtra`] and [`WithoutExtra`]
+//! variants.
 
 pub mod extra;
 pub mod formattable;
@@ -12,13 +55,15 @@ use serde_json::Value;
 use std::{fmt::Display, time::Duration};
 use url::Url;
 
+/// Trait alias for [`Playlist`]'s [`ExtraFlag`] generic.
 pub trait PlaylistExtra = ExtraFlag<Array<Track<WithExtra>>>;
 
+/// A Qobuz playlist with its optional extra [`Track`]s.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlist<EF: PlaylistExtra> {
     pub name: String,
     pub slug: String,
-    pub owner: Owner,
+    pub owner: PlaylistOwner,
     pub is_public: bool,
 
     #[serde(with = "ser_datetime_i64")]
@@ -39,12 +84,14 @@ pub struct Playlist<EF: PlaylistExtra> {
     pub tracks: EF::Extra,
 }
 
+/// A [Playlist]'s owner.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Owner {
+pub struct PlaylistOwner {
     pub id: i64,
     pub name: String,
 }
 
+/// A queried array.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Array<T> {
     pub items: Vec<T>,
@@ -53,13 +100,12 @@ pub struct Array<T> {
     pub total: i64,
 }
 
+/// Trait alias for [`Track`]'s [`ExtraFlag`] generic.
 pub trait TrackExtra = ExtraFlag<Album<WithoutExtra>>;
 
+/// A Qobuz track with its optional extra [`Album`].
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Track<EF>
-where
-    EF: TrackExtra,
-{
+pub struct Track<EF: TrackExtra> {
     pub copyright: Option<String>,
     pub displayable: bool,
     pub downloadable: bool,
@@ -87,10 +133,7 @@ where
     pub album: EF::Extra,
 }
 
-impl<EF> Display for Track<EF>
-where
-    EF: ExtraFlag<Album<WithoutExtra>>,
-{
+impl<EF: TrackExtra> Display for Track<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (true, year) = self.release_date_original.year_ce() else {
             panic!("Release year shouldn't be BCE");
@@ -107,13 +150,12 @@ where
     }
 }
 
+/// Trait alias for [`Album`]'s [`ExtraFlag`] generic.
 pub trait AlbumExtra = ExtraFlag<Array<Track<WithoutExtra>>>;
 
+/// A Qobuz album with its optional extra [`Track`]s.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Album<EF>
-where
-    EF: AlbumExtra,
-{
+pub struct Album<EF: AlbumExtra> {
     pub artist: Artist<WithoutExtra>,
     pub displayable: bool,
     pub downloadable: bool,
@@ -135,10 +177,7 @@ where
     pub tracks: EF::Extra,
 }
 
-impl<EF> Display for Album<EF>
-where
-    EF: ExtraFlag<Array<Track<WithoutExtra>>>,
-{
+impl<EF: AlbumExtra> Display for Album<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -151,6 +190,8 @@ where
 }
 
 impl Album<WithExtra> {
+    /// Get this album's tracks as if they had been queried on their own, without performing
+    /// additional requests to the Qobuz API.
     #[must_use]
     pub fn get_tracks_with_extra(&self) -> Vec<Track<WithExtra>> {
         let s = self.clone().without_extra();
@@ -162,11 +203,12 @@ impl Album<WithExtra> {
     }
 }
 
+/// Trait alias for [`Artist`]'s [`ExtraFlag`] generic.
+pub trait ArtistExtra = ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>;
+
+/// An artist and their optional extra tracks and albums.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Artist<EF>
-where
-    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
-{
+pub struct Artist<EF: ArtistExtra> {
     pub albums_count: u64,
     pub id: i64,
     pub image: Value,
@@ -176,15 +218,13 @@ where
     pub albums: <EF as ExtraFlag<Array<Album<WithoutExtra>>>>::Extra,
 }
 
-impl<EF> Display for Artist<EF>
-where
-    EF: ExtraFlag<Array<Track<WithExtra>>> + ExtraFlag<Array<Album<WithoutExtra>>>,
-{
+impl<EF: ArtistExtra> Display for Artist<EF> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
 }
 
+/// An item's genre.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Genre {
     pub id: u64,
@@ -193,6 +233,7 @@ pub struct Genre {
     pub slug: String,
 }
 
+/// An image (for album covers).
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     pub large: String,
@@ -200,6 +241,7 @@ pub struct Image {
     pub thumbnail: String,
 }
 
+/// A label.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Label {
     pub albums_count: u64,
@@ -209,18 +251,27 @@ pub struct Label {
     pub supplier_id: u64,
 }
 
+/// A composer.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Composer {
     pub id: u64,
     pub name: String,
 }
 
+/// A performer.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Performer {
     pub id: u64,
     pub name: String,
 }
 
+impl Display for Performer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+/// The genre of a playlist.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum PlaylistGenre {
@@ -234,12 +285,8 @@ pub enum PlaylistGenre {
     },
 }
 
-impl Display for Performer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
+/// Trait implemented for the main, queriable Qobuz types, providing name information and depended
+/// on by other traits.
 pub trait QobuzType: std::fmt::Debug {
     #[must_use]
     fn name_singular<'b>() -> &'b str

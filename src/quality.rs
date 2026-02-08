@@ -1,8 +1,13 @@
+//! Qobuz download quality.
+//!
+//! See the docs of [Quality].
+
 use core::fmt::{self, Display, Formatter};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
+/// Qobuz download quality.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default, clap::ValueEnum)]
 #[serde(try_from = "u8")]
 #[serde(into = "u8")]
@@ -51,6 +56,7 @@ impl FromStr for Quality {
     }
 }
 
+/// Error returned when trying to convert an invalid value to a [Quality].
 #[derive(Debug, Error)]
 #[error("Invalid quality")]
 pub struct InvalidQualityError;
@@ -66,6 +72,7 @@ impl From<Quality> for u8 {
     }
 }
 
+/// Downloaded file extension.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum FileExtension {
     Mp3,

@@ -1,3 +1,5 @@
+//! Qobuz API authentication.
+
 use super::{do_request, make_http_client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -6,9 +8,12 @@ use std::env::VarError;
 use thiserror::Error;
 
 /// Credentials for Qobuz.
+///
+/// Use qobuz-dl to get these.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credentials {
     pub email: String,
+    /// Hashed password.
     pub password: String,
     pub app_id: String,
     pub secret: String,

@@ -1,3 +1,7 @@
+//! Utilities to download items from qobuz.
+//!
+//! To get started, refer to the [`Download`] trait documentation.
+
 use crate::{
     quality::{FileExtension, Quality},
     runtime_formatter::{Format, Formattable, IllegalPlaceholderError, Placeholder},
@@ -32,17 +36,13 @@ use delayed_watch::DelayedWatchReceiver;
 #[macro_use]
 mod builder;
 
+/// Default directory name for albums.
 pub const DEFAULT_ALBUM_DIR_NAME_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
+/// Default file name for albums.
 pub const DEFAULT_TRACK_FILE_NAME_FORMAT: &str = "{media_number}-{track_number}. {title}";
 
 builder! {
-    /// Options for downloads.
-    ///
-    /// * `root_dir` and `m3u_dir` - Where tracks and playlists are saved. By default, `m3u_dir`
-    /// will be set to `{root_dir}/playlists`.
-    /// * `quality` - The quality at which tracks are downloaded.
-    /// * `overwrite` - Whether or not to overwrite existing tracks and playlists.
-    /// * `path_format` - The format options for file names.
+    /// Download configuration.
     ///
     /// # Example
     ///
@@ -58,7 +58,7 @@ builder! {
     /// use std::path::Path;
     /// let credentials = Credentials::from_env().unwrap();
     /// let client = Client::new(credentials).await.unwrap();
-    /// let opts = DownloadConfig::builder(Path::new("music"))
+    /// let conf = DownloadConfig::builder(Path::new("music"))
     ///     .quality(Quality::Mp3)
     ///     .overwrite(true)
     ///     .build()
@@ -68,14 +68,22 @@ builder! {
     #[derive(Debug, Clone)]
     DownloadConfig {
         provided: {
+            /// Directory where to put downloaded tracks.
             root_dir: PathBuf = impl Into<PathBuf> => root_dir.into(),
         },
         default: {
+            /// Directory where to put downloaded playlists.
+            /// Default `root_dir.join("playlists")`
             m3u_dir: PathBuf = root_dir.join("playlists"),
+            /// The quality to download at.
             quality: Quality = Quality::default(),
+            /// Whether or not to overwrite conflicting tracks.
             overwrite: bool = false,
+            /// Whether or not to overwrite conflicting playlists.
             overwrite_playlists: bool = true,
+            /// File name format for tracks.
             track_file_name_format: Format<DownloadedItemPlaceholder<TrackPlaceholder>> = DEFAULT_TRACK_FILE_NAME_FORMAT.parse().expect("Default format is correct"),
+            /// Directory name for albums.
             album_dir_name_format: Format<DownloadedItemPlaceholder<AlbumPlaceholder>> = DEFAULT_ALBUM_DIR_NAME_FORMAT.parse().expect("Default format is correct"),
         }
     },
@@ -90,10 +98,36 @@ builder! {
     }
 }
 
+/// Trait implemented for data that can be downloaded (e.g. tracks).
+///
+/// The [download][Download::download] method returns two values:
+/// - A future for the downloader;
+/// - A oneshot receiver which will receive a watch receiver once the download has started.
+///   This watch receiver will receive the progress updates of the download as it occurs.
+///   If the oneshot receiver doesn't receive anything, the download failed to start.
+///   [^note]
+///
+/// # Example
+///
+/// ```
+/// # {
+/// # std::env::set_var("QOBUZ_DL_ROOT", "./music");
+/// // examples/download_track.rs
+#[doc = include_str!("../../examples/download_track.rs")]
+/// # main();
+/// # }
+/// ```
+///
+/// [^note]: The [`tokio::sync::watch`] channel was wrapped in a [`tokio::sync::oneshot`] channel
+/// since watch channels need an initial value (this makes for a watch channel that *doesn't* have
+/// an initial value).
 pub trait Download: RootEntity {
+    /// The type of progress updates sent through the returned progress channel.
     type ProgressType: Progress + Send + Sync + 'static;
+    /// The type of returned path information
     type PathInfoType: Debug + Send + Sync + 'static;
 
+    /// Please refer to the [trait-level documentation][Download].
     #[must_use]
     fn download(
         &self,
@@ -105,10 +139,11 @@ pub trait Download: RootEntity {
     );
 }
 
+/// Trait for progress updates returned by [Download].
 pub trait Progress: Debug + Display {
-    /// The numerator of the progress.
+    /// Number of items or file chunks already downloaded.
     fn progress_numerator(&self) -> u64;
-    /// The denominator of the progress.
+    /// Total number of items or file chunks.
     fn progress_denominator(&self) -> u64;
     /// The progress as an integer percentage.
     fn progress_percentage(&self) -> u8 {
@@ -118,9 +153,12 @@ pub trait Progress: Debug + Display {
     }
 }
 
+/// Progress of a track download.
 #[derive(Debug, Clone)]
 pub struct TrackDownloadProgress {
+    /// Number of already downloaded bytes.
     pub downloaded: u64,
+    /// Total number of bytes for this track.
     pub total: u64,
 }
 
@@ -308,6 +346,7 @@ impl Download for Album<WithExtra> {
     }
 }
 
+/// Info for paths of the m3u file and track file paths of a playlist.
 #[derive(Debug)]
 pub struct PlaylistPathInfo {
     pub track_paths: Vec<PathBuf>,
@@ -347,7 +386,9 @@ impl Download for Playlist<WithExtra> {
     }
 }
 
+/// Get the path of an item, using the formats and root dirs specified in the [DownloadConfig].
 pub trait GetPath: QobuzType {
+    /// Get the path of an item.
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf;
 }
 
@@ -360,29 +401,27 @@ impl GetPath for Track<WithExtra> {
                     inner: self,
                     quality: &download_config.quality
                 }
-                .format(&download_config.track_path_format,)
+                .format(&download_config.track_file_name_format)
             ),
             FileExtension::from(&download_config.quality)
         ))
     }
 }
 
-impl<EF> GetPath for Album<EF>
-where
-    EF: AlbumExtra,
-{
+impl<EF: AlbumExtra> GetPath for Album<EF> {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         download_config.root_dir.join(sanitize_filename(
             &DownloadedItem {
                 inner: self,
                 quality: &download_config.quality,
             }
-            .format(&download_config.album_path_format),
+            .format(&download_config.album_dir_name_format),
         ))
     }
 }
 
 impl<EF: PlaylistExtra> GetPath for Playlist<EF> {
+    // TODO: Allow custom format
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         download_config
             .m3u_dir
@@ -425,20 +464,27 @@ pub fn write_m3u(
     Ok(m3u_path)
 }
 
+/// Errors that can occur in `Downloader`.
 #[derive(Debug, Error)]
 pub enum DownloadError {
+    /// Error with track tagging.
     #[error("tagging error `{0}`")]
     TaggingError(#[from] TaggingError),
+    /// IO error.
     #[error("IO error `{0}`")]
     IoError(#[from] std::io::Error),
+    /// Reqwest error.
     #[error("reqwest error `{0}`")]
     ReqwestError(#[from] reqwest::Error),
+    /// Errors found in data returned by qobuz. May be due to login issues.
     #[error("API error `{0}`")]
     ApiError(#[from] ApiError),
+    /// IO errors while writing an M3u file.
     #[error("IO error while writing M3u file `{0}`")]
     M3uWritingError(std::io::Error),
 }
 
+/// Errors about missing root or m3u directories.
 #[derive(Debug, Error)]
 pub enum NonExistentDirectoryError {
     #[error("Non existent download root directory `{0}`")]
@@ -447,6 +493,8 @@ pub enum NonExistentDirectoryError {
     M3uDir(PathBuf),
 }
 
+/// Sanitize a filename, removing any slashes and replacing non-alphanumeric chars with "_"
+// TODO: allow spaces, dashes, etc
 #[must_use]
 pub fn sanitize_filename(filename: &str) -> String {
     let filename = filename
@@ -456,10 +504,7 @@ pub fn sanitize_filename(filename: &str) -> String {
     filename.trim_start_matches('.').to_string()
 }
 
-/// Automatically get the root dir from environment or a default value.
-///
-/// If used multiple times, should probably be converted to a PathBuf ahead of time for optimal
-/// performance, but the behavior won't change
+/// Automatically get the root dir from env var `QOBUZ_DL_ROOT`, defaulting to `$HOME/Music`.
 pub struct AutoRootDir;
 
 impl From<AutoRootDir> for PathBuf {
@@ -483,7 +528,8 @@ impl From<AutoRootDir> for PathBuf {
     }
 }
 
-pub struct DownloadedItem<'a, T: Formattable> {
+/// A downloaded item's info, for path formatting.
+struct DownloadedItem<'a, T: Formattable> {
     pub inner: &'a T,
     pub quality: &'a Quality,
 }
@@ -499,6 +545,8 @@ impl<'a, T: Formattable> Formattable for DownloadedItem<'a, T> {
     }
 }
 
+/// Formatting placeholder for downloaded item paths. To be used with
+/// [runtime_formatter][crate::runtime_formatter]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DownloadedItemPlaceholder<T: Placeholder> {
     Inner(T),

@@ -4,13 +4,20 @@ macro_rules! builder {
         $target:ident {
             provided: {
                 $(
+                    $(#[$($provided_attrss:tt)*])*
                     $provided_field:ident: $provided_ty:ty
                     =
                     $provided_arg_ty:ty => $provided_conv_fn:expr
                 ),*
                 $(,)?
             },
-            default: { $($def_field:ident : $def_ty:ty = $def_value:expr),* $(,)? }
+            default: {
+                $(
+                    $(#[$($def_attrss:tt)*])*
+                    $def_field:ident : $def_ty:ty = $def_value:expr
+                ),*
+                $(,)?
+            }
         },
         verify: Result<(), $verify_err:ty> = $verify:block
     ) => {
@@ -36,8 +43,8 @@ macro_rules! builder {
 
             #[doc = "A builder for `" $target "`."]
             pub struct [<$target Builder>] {
-                $($provided_field: $provided_ty,)*
-                $($def_field: $def_ty,)*
+                $($(#[$($provided_attrss)*])* $provided_field: $provided_ty,)*
+                $($(#[$($def_attrss)*])* $def_field: $def_ty,)*
             }
 
             impl [<$target Builder>] {
@@ -67,7 +74,7 @@ macro_rules! builder {
                 }
 
                 $(
-                    #[doc = "Set the `" $provided_field "` field."]
+                    $(#[$($provided_attrss)*])*
                     #[must_use]
                     pub fn $provided_field(self, value: $provided_ty) -> Self {
                         Self {
@@ -78,7 +85,7 @@ macro_rules! builder {
                 )*
 
                 $(
-                    #[doc = "Set the `" $def_field "` field."]
+                    $(#[$($def_attrss)*])*
                     #[must_use]
                     pub fn $def_field(self, value: $def_ty) -> Self {
                         Self {

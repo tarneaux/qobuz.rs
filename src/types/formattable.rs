@@ -1,7 +1,39 @@
+//! Tools for Qobuz API types that can be formatted with
+//! [runtime_formatter][crate::runtime_formatter].
+
 use super::{Album, AlbumExtra, Track, TrackExtra};
-use crate::placeholder_enum;
 use crate::runtime_formatter::Formattable;
 use chrono::Datelike;
+
+macro_rules! placeholder_enum {
+    ($type:ident, [ $($field:ident),+ $(,)? ]) => {
+        paste::paste! {
+            #[doc = concat!("Format placeholder for [`", stringify!($type), "`].")]
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum [<$type Placeholder>] {
+                $( [< $field:camel >] ),+
+            }
+
+            impl std::str::FromStr for [<$type Placeholder>] {
+                type Err = $crate::runtime_formatter::IllegalPlaceholderError;
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    match s {
+                        $( stringify!($field) => Ok(Self::[< $field:camel >]), )+
+                        _ => Err($crate::runtime_formatter::IllegalPlaceholderError(s.to_string())),
+                    }
+                }
+            }
+
+            impl std::fmt::Display for [<$type Placeholder>] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+                    match self {
+                        $( Self::[< $field:camel >] => write!(f, stringify!($field)), )+
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl<EF: AlbumExtra> Formattable for Album<EF> {
     type Placeholder = AlbumPlaceholder;
