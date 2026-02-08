@@ -2,6 +2,7 @@
 #![allow(clippy::trait_duplication_in_bounds)]
 
 pub mod extra;
+pub mod formattable;
 pub mod traits;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};

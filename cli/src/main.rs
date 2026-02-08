@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use qobuz::{
     auth::{Credentials, LoginError},
     downloader::{
-        path_format::{DEFAULT_ALBUM_PATH_FORMAT, DEFAULT_TRACK_PATH_FORMAT},
-        AutoRootDir, Download, DownloadConfig, DownloadError,
+        AutoRootDir, Download, DownloadConfig, DownloadError, DEFAULT_ALBUM_FILENAME_FORMAT,
+        DEFAULT_TRACK_FILENAME_FORMAT,
     },
     quality::Quality,
     types::{extra::WithExtra, Album, Playlist, Track},
@@ -45,11 +45,11 @@ struct Cli {
     no_overwrite_playlists: bool,
 
     /// Path format for albums
-    #[clap(short, long, default_value = DEFAULT_ALBUM_PATH_FORMAT)]
+    #[clap(short, long, default_value = DEFAULT_ALBUM_FILENAME_FORMAT)]
     album_path_format: String,
 
     /// Path format for tracks
-    #[clap(short, long, default_value = DEFAULT_TRACK_PATH_FORMAT)]
+    #[clap(short, long, default_value = DEFAULT_TRACK_FILENAME_FORMAT)]
     track_path_format: String,
 }
 

@@ -4,6 +4,7 @@
 pub mod auth;
 pub mod downloader;
 pub mod quality;
+pub mod runtime_formatter;
 pub mod types;
 
 #[cfg(test)]

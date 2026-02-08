@@ -1,9 +1,11 @@
 use crate::{
-    downloader::path_format::{AlbumPlaceholder, Format, TrackPlaceholder},
     quality::{FileExtension, Quality},
+    runtime_formatter::{Format, Formattable, IllegalPlaceholderError, Placeholder},
     types::{
-        extra::WithExtra, traits::RootEntity, Album, AlbumExtra, Playlist, PlaylistExtra,
-        QobuzType, Track,
+        extra::WithExtra,
+        formattable::{AlbumPlaceholder, TrackPlaceholder},
+        traits::RootEntity,
+        Album, AlbumExtra, Playlist, PlaylistExtra, QobuzType, Track,
     },
     ApiError,
 };
@@ -14,20 +16,24 @@ use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
+    str::FromStr,
 };
 use thiserror::Error;
 use tokio::{
     fs::OpenOptions,
     sync::{mpsc, oneshot, watch},
 };
+
 pub mod tagging;
 use tagging::{tag_track, TaggingError};
-pub mod path_format;
 
 mod delayed_watch;
 use delayed_watch::DelayedWatchReceiver;
 #[macro_use]
 mod builder;
+
+pub const DEFAULT_ALBUM_FILENAME_FORMAT: &str = "{artist} - {title} ({year}) [{quality}]";
+pub const DEFAULT_TRACK_FILENAME_FORMAT: &str = "{media_number}-{track_number}. {title}";
 
 builder! {
     /// Options for downloads.
@@ -46,7 +52,7 @@ builder! {
     /// use qobuz::{
     ///     auth::Credentials,
     ///     Client,
-    ///     downloader::{DownloadConfig, path_format::PathFormat},
+    ///     downloader::DownloadConfig,
     ///     quality::Quality
     /// };
     /// use std::path::Path;
@@ -69,8 +75,8 @@ builder! {
             quality: Quality = Quality::default(),
             overwrite: bool = false,
             overwrite_playlists: bool = true,
-            track_path_format: Format<TrackPlaceholder> = Format::default(),
-            album_path_format: Format<AlbumPlaceholder> = Format::default(),
+            track_path_format: Format<DownloadedItemPlaceholder<TrackPlaceholder>> = DEFAULT_TRACK_FILENAME_FORMAT.parse().expect("Default format is correct"),
+            album_path_format: Format<DownloadedItemPlaceholder<AlbumPlaceholder>> = DEFAULT_ALBUM_FILENAME_FORMAT.parse().expect("Default format is correct"),
         }
     },
     verify: Result<(), NonExistentDirectoryError> = {
@@ -349,7 +355,13 @@ impl GetPath for Track<WithExtra> {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         self.album.get_path(download_config).join(format!(
             "{}.{}",
-            sanitize_filename(&download_config.track_path_format.format(self)),
+            sanitize_filename(
+                &DownloadedItem {
+                    inner: self,
+                    quality: &download_config.quality
+                }
+                .format(&download_config.track_path_format,)
+            ),
             FileExtension::from(&download_config.quality)
         ))
     }
@@ -361,9 +373,11 @@ where
 {
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf {
         download_config.root_dir.join(sanitize_filename(
-            &download_config
-                .album_path_format
-                .format(self, &download_config.quality),
+            &DownloadedItem {
+                inner: self,
+                quality: &download_config.quality,
+            }
+            .format(&download_config.album_path_format),
         ))
     }
 }
@@ -465,6 +479,38 @@ impl From<AutoRootDir> for PathBuf {
                     .expect("Couldn't get home dir")
                     .join("Music")
             }
+        }
+    }
+}
+
+pub struct DownloadedItem<'a, T: Formattable> {
+    pub inner: &'a T,
+    pub quality: &'a Quality,
+}
+
+impl<'a, T: Formattable> Formattable for DownloadedItem<'a, T> {
+    type Placeholder = DownloadedItemPlaceholder<T::Placeholder>;
+
+    fn get_field(&self, field: &Self::Placeholder) -> String {
+        match field {
+            DownloadedItemPlaceholder::Inner(v) => self.inner.get_field(v),
+            DownloadedItemPlaceholder::Quality => self.quality.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DownloadedItemPlaceholder<T: Placeholder> {
+    Inner(T),
+    Quality,
+}
+
+impl<T: Placeholder> FromStr for DownloadedItemPlaceholder<T> {
+    type Err = IllegalPlaceholderError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "quality" => Ok(Self::Quality),
+            v => T::from_str(v).map(|v| Self::Inner(v)),
         }
     }
 }
