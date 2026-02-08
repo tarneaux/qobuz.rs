@@ -116,9 +116,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "audiotags"
-version = "0.5.0"
-source = "git+https://github.com/tarneaux/audiotags#3ed9fd1f59f76dc077d13bdf6633934fcd3c0f37"
+name = "audiotags-macro"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eaa9b2312fc01f7291f3b7b0f52ed08b1c0177c96a2e696ab55695cc4d06889"
+
+[[package]]
+name = "audiotags-qobuz"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1f9515c85c8085560cc248587f3c9b052a2ffa4552ce0d17faa2746a5c894ea"
 dependencies = [
  "audiotags-macro",
  "id3",
@@ -127,11 +134,6 @@ dependencies = [
  "readme-rustdocifier",
  "thiserror 1.0.69",
 ]
-
-[[package]]
-name = "audiotags-macro"
-version = "0.2.0"
-source = "git+https://github.com/tarneaux/audiotags#3ed9fd1f59f76dc077d13bdf6633934fcd3c0f37"
 
 [[package]]
 name = "autocfg"
@@ -1144,7 +1146,7 @@ dependencies = [
 name = "qobuz"
 version = "0.1.0"
 dependencies = [
- "audiotags",
+ "audiotags-qobuz",
  "bytes",
  "chrono",
  "clap",

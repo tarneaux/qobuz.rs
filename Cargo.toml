@@ -27,7 +27,7 @@ tokio = { workspace = true }
 tokio-test = { workspace = true }
 url = { workspace = true }
 
-audiotags = { version = "0.5.0", git = "https://github.com/tarneaux/audiotags" }
+audiotags-qobuz = { version = "0.5.1" }
 bytes = "1.10.0"
 chrono = { version = "0.4.39", features = ["serde"] }
 futures = "0.3.31"

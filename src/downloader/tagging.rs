@@ -22,15 +22,17 @@ where
         .await?
         .bytes()
         .await?;
-    let cover = audiotags::Picture::new(&cover_raw, audiotags::MimeType::Jpeg);
+    let cover = audiotags_qobuz::Picture::new(&cover_raw, audiotags_qobuz::MimeType::Jpeg);
 
-    let mut tag = match audiotags::Tag::new().read_from_path(path) {
+    let mut tag = match audiotags_qobuz::Tag::new().read_from_path(path) {
         Ok(v) => v,
         Err(e) => match e {
-            audiotags::Error::Id3TagError(ref e2) if matches!(e2.kind, id3::ErrorKind::NoTag) => {
+            audiotags_qobuz::Error::Id3TagError(ref e2)
+                if matches!(e2.kind, id3::ErrorKind::NoTag) =>
+            {
                 // Id3 returns an error when there's no tag saved on the file yet, but then we can
                 // just create a new empty tag.
-                Box::new(audiotags::Id3v2Tag::new())
+                Box::new(audiotags_qobuz::Id3v2Tag::new())
             }
             _ => {
                 return Err(e.into());
@@ -40,7 +42,7 @@ where
     tag.set_title(&track.title);
     tag.set_date(datetime_to_timestamp(track.release_date_original)?);
     tag.set_year(track.release_date_original.year());
-    tag.set_album(audiotags::Album {
+    tag.set_album(audiotags_qobuz::Album {
         title: &album.title,
         artist: Some(&album.artist.name),
         cover: Some(cover),
@@ -73,7 +75,7 @@ pub enum TaggingError {
     #[error("couldn't cast int type `{0}`")]
     TryFromIntError(#[from] std::num::TryFromIntError),
     #[error("audiotags error `{0}`")]
-    AudioTags(#[from] audiotags::Error),
+    AudioTags(#[from] audiotags_qobuz::Error),
     #[error("IO error `{0}`")]
     IoError(#[from] std::io::Error),
     #[error("Reqwest error: `{0}`")]
