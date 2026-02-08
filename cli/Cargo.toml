@@ -2,6 +2,12 @@
 name = "qobuz-cli"
 version = "0.1.0"
 edition = "2024"
+authors = ["Tarneo <tarneo@tarneo.fr>"]
+description = "Qobuz CLI client"
+repository = "https://git.sr.ht/~tarneo/qobuz.rs"
+license = "GPL-2.0-only"
+keywords = ["music", "qobuz", "api"]
+categories = ["command-line-utilities", "multimedia"]
 
 [[bin]]
 name = "qobuz"
@@ -9,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 
-qobuz = { path = "../" }
+qobuz = { path = "../", version = "0.1.0" }
 
 url = { workspace = true }
 tokio = { workspace = true }

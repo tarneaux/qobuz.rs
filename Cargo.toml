@@ -2,6 +2,12 @@
 name = "qobuz"
 version = "0.1.0"
 edition = "2021"
+authors = ["Tarneo <tarneo@tarneo.fr>"]
+description = "Qobuz API lirary"
+repository = "https://git.sr.ht/~tarneo/qobuz.rs"
+license = "GPL-2.0-only"
+keywords = ["music", "qobuz", "api"]
+categories = ["multimedia"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
