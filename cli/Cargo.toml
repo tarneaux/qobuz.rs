@@ -1,6 +1,6 @@
 [package]
 name = "qobuz-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Tarneo <tarneo@tarneo.fr>"]
 description = "Qobuz CLI client"
@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 
-qobuz = { path = "../", version = "0.1.0" }
+qobuz = { path = "../", version = "0.1.1" }
 
 url = { workspace = true }
 tokio = { workspace = true }
