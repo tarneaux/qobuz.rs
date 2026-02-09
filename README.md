@@ -7,6 +7,6 @@
 
 ## Features
 
-- [x] Basic read-only API usage
-- [x] Download
-- [x] Basic download CLI
+- Basic read-only API usage
+- Download
+- Basic download CLI
