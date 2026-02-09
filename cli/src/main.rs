@@ -23,12 +23,13 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
 
+    #[allow(clippy::doc_markdown)]
     /// Root directory for downloads.
-    /// Overrides QOBUZ_DL_ROOT.
+    /// Overrides $QOBUZ_DL_ROOT.
     #[clap(long, short)]
     root_dir: Option<PathBuf>,
 
-    /// Directory for m3u playlist files [default: {root_dir}/playlists]
+    /// Directory for m3u playlist files [default: `{root_dir}/playlists`]
     #[clap(long)]
     m3u_dir: Option<PathBuf>,
 

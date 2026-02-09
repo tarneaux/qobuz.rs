@@ -9,8 +9,8 @@ use std::fmt::Debug;
 ///
 /// See the [parent module documentation][super] to get started.
 ///
-/// Multiple types can be used with the same flag by specifying two generic constraints of trait
-/// ExtraFlag, with different `T`'s.
+/// Multiple types can be used with the same flag by constraining the same generic twice with a
+/// different `T`.
 pub trait ExtraFlag<T>: std::fmt::Debug {
     /// The type to use for the optional field's definition.
     type Extra: DeserializeOwned + Serialize + Eq + Clone + Debug;

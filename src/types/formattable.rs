@@ -1,5 +1,5 @@
 //! Tools for Qobuz API types that can be formatted with
-//! [runtime_formatter][crate::runtime_formatter].
+//! [`runtime_formatter`][crate::runtime_formatter].
 
 use super::{Album, AlbumExtra, Track, TrackExtra};
 use crate::runtime_formatter::Formattable;

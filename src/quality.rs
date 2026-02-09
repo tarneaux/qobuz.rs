@@ -51,7 +51,7 @@ impl FromStr for Quality {
             "cd" => Ok(Self::Cd),
             "hires96" => Ok(Self::HiRes96),
             "hires192" => Ok(Self::HiRes192),
-            v => Quality::try_from(v.parse::<u8>().map_err(|_| InvalidQualityError)?),
+            v => Self::try_from(v.parse::<u8>().map_err(|_| InvalidQualityError)?),
         }
     }
 }

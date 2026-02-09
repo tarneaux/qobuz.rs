@@ -27,8 +27,7 @@ async fn main() {
         tokio::spawn(async move {
             let mut rx = progress_rx.await.unwrap();
             while rx.changed().await.is_ok() {
-                let progress = rx.borrow();
-                println!("{progress:?}");
+                println!("{:?}", rx.borrow());
             }
         });
         fut.await.unwrap();

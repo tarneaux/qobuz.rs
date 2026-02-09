@@ -80,7 +80,7 @@ pub trait Formattable {
             .iter()
             .map(|segment| match segment {
                 FormatSegment::Placeholder(field) => self.get_field(field),
-                FormatSegment::Literal(s) => s.to_string(),
+                FormatSegment::Literal(s) => s.clone(),
             })
             .collect()
     }

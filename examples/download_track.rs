@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use qobuz::{
     auth::Credentials,
     downloader::{AutoRootDir, Download, DownloadConfig},

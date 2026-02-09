@@ -60,7 +60,7 @@ pub(super) async fn get_user_auth_token(credentials: &Credentials) -> Result<Str
         return Err(LoginError::FreeAccount);
     }
     match resp.get("user_auth_token") {
-        Some(Value::String(uat)) => Ok(uat.to_string()),
+        Some(Value::String(uat)) => Ok(uat.clone()),
         None | Some(_) => Err(LoginError::NoUserAuthToken),
     }
 }

@@ -9,8 +9,8 @@
 //!
 //! To prevent duplication of these types (one top-level and one lower-level version), they have
 //! been implemented with a generic, named `EF` ("Extra Flag"). It can have one of two values :
-//! [`WithExtra`] and [`WithoutExtra`]. WithExtra makes for a top-level struct containing it's
-//! children's information (e.g an [`Album<WithExtra>`] will contain the album's tracks).
+//! [`WithExtra`] and [`WithoutExtra`]. `WithExtra` makes for a top-level struct containing it's
+//! children's information (e.g an `Album<WithExtra>` will contain the album's tracks).
 //!
 //! For example, a function that needs a playlist with its tracks could look like this :
 //!
@@ -21,16 +21,16 @@
 //! }
 //! ```
 //!
-//! [`WithExtra`] and [`WithoutExtra`] are two empty structs implementing the [`ExtraFlag`] trait.
+//! `WithExtra` and `WithoutExtra` are two empty structs implementing the [`ExtraFlag`] trait.
 //! This trait takes a generic that corresponds to the optional field's type. To avoid extensive
 //! type constraints when using these types, trait aliases have been created for each type of the
 //! API that has an extra flag (namely [`Album`], [`Playlist`], [`Track`] and [`Artist`]). These
 //! aliases are respectively called [`AlbumExtra`], [`PlaylistExtra`], [`TrackExtra`] and
 //! [`ArtistExtra`].
 //!
-//! For example, a function with an [`Playlist`] argument that doesn't need to access the
-//! playlist's tracks (and should therefore accept both [`Playlist<WithExtra>`] and
-//! [`Playlist<WithoutExtra>`] arguments) can be written as follows :
+//! For example, a function with a `Playlist` argument that doesn't need to access the
+//! playlist's tracks (and should therefore accept both `Playlist<WithExtra>` and
+//! `Playlist<WithoutExtra>` arguments) can be written as follows :
 //!
 //! ```
 //! use qobuz::types::{Playlist, PlaylistExtra};
@@ -40,8 +40,8 @@
 //! }
 //! ```
 //!
-//! For convenience, [`Album`], [`Playlist`], [`Track`] and [`Artist`] have `without_extra` and
-//! `with_extra` methods which allow converting between the [`WithExtra`] and [`WithoutExtra`]
+//! For convenience, `Album`, `Playlist`, `Track` and `Artist` have `without_extra` and
+//! `with_extra` methods which allow converting between the `WithExtra` and `WithoutExtra`
 //! variants.
 
 pub mod extra;
@@ -143,7 +143,7 @@ impl<EF: TrackExtra> Display for Track<EF> {
             "{} - {} ({})",
             self.performer
                 .clone()
-                .map_or("Various Artists".to_string(), |p| p.to_string()),
+                .map_or_else(|| "Various Artists".to_string(), |p| p.to_string()),
             self.title,
             year
         )

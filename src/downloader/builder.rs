@@ -50,6 +50,7 @@ macro_rules! builder {
             impl [<$target Builder>] {
                 #[doc = "Create a new `" [<$target Builder>] "`, setting defaultless fields."]
                 #[must_use]
+                #[allow(clippy::missing_panics_doc)]
                 pub fn new($($provided_field: $provided_arg_ty),*) -> Self {
                     $(let $provided_field: $provided_ty = $provided_conv_fn;)*
                     // This assignment is done separately to allow computing default values based

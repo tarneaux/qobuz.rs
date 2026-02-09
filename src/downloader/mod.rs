@@ -312,9 +312,7 @@ async fn download_tracks(
         println!("{track}");
 
         match fut.await {
-            Err(DownloadError::ApiError(ApiError::IsSample)) => {
-                continue;
-            }
+            Err(DownloadError::ApiError(ApiError::IsSample)) => {}
             Err(e) => {
                 return Err(e);
             }
@@ -386,7 +384,7 @@ impl Download for Playlist<WithExtra> {
     }
 }
 
-/// Get the path of an item, using the formats and root dirs specified in the [DownloadConfig].
+/// Get the path of an item, using the formats and root dirs specified in the [`DownloadConfig`].
 pub trait GetPath: QobuzType {
     /// Get the path of an item.
     fn get_path(&self, download_config: &DownloadConfig) -> PathBuf;
@@ -534,7 +532,7 @@ struct DownloadedItem<'a, T: Formattable> {
     pub quality: &'a Quality,
 }
 
-impl<'a, T: Formattable> Formattable for DownloadedItem<'a, T> {
+impl<T: Formattable> Formattable for DownloadedItem<'_, T> {
     type Placeholder = DownloadedItemPlaceholder<T::Placeholder>;
 
     fn get_field(&self, field: &Self::Placeholder) -> String {
@@ -546,7 +544,7 @@ impl<'a, T: Formattable> Formattable for DownloadedItem<'a, T> {
 }
 
 /// Formatting placeholder for downloaded item paths. To be used with
-/// [runtime_formatter][crate::runtime_formatter]
+/// [`runtime_formatter`][crate::runtime_formatter]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DownloadedItemPlaceholder<T: Placeholder> {
     Inner(T),
