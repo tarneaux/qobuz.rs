@@ -1,3 +1,24 @@
+//! Bindings for the Qobuz music API.
+//!
+//! # Logging in
+//!
+//! Logging in is not yet implemented in qobuz.rs. Pull requests welcome !
+//!
+//! Use `qobuz-dl` to get your credentials :
+//! ```sh
+//! pip3 install qobuz-dl
+//! qobuz-dl -r
+//! ```
+//!
+//! Then, set the `QOBUZ_EMAIL`, `QOBUZ_PASSWORD`, `QOBUZ_APP_ID` and `QOBUZ_SECRET` environment
+//! variables according to the contents of `~/.config/qobuz-dl/config.ini`. You may need to try
+//! multiple secrets from the file until you find the right one.
+//!
+//! # Usage
+//!
+//! For basic API querying and getting download URLs, see [`Client`]. For a higher-level download
+//! API with tagging, see [`downloader::Download`].
+
 #![feature(type_changing_struct_update)]
 #![feature(trait_alias)]
 
