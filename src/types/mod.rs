@@ -84,6 +84,12 @@ pub struct Playlist<EF: PlaylistExtra> {
     pub tracks: EF::Extra,
 }
 
+impl<EF: PlaylistExtra> Display for Playlist<EF> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 /// A [Playlist]'s owner.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PlaylistOwner {
