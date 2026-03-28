@@ -124,7 +124,7 @@ builder! {
 pub trait Download: RootEntity {
     /// The type of progress updates sent through the returned progress channel.
     type ProgressType: Progress + Send + Sync + 'static;
-    /// The type of returned path information
+    /// The type of returned path information.
     type PathInfoType: Debug + Send + Sync + 'static;
 
     /// Please refer to the [trait-level documentation][Download].
