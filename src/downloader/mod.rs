@@ -195,7 +195,7 @@ pub struct ArrayDownloadProgress {
 }
 
 impl ArrayDownloadProgress {
-    const fn downloaded(&self) -> usize {
+    pub const fn downloaded(&self) -> usize {
         self.current_index - 1
     }
 }
